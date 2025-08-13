@@ -41,7 +41,8 @@ chmod +x main.sh
 3. (Optional) Move it to your PATH so you can run baky from anywhere:
 
 ```bash
-sudo mv main.sh /usr/local/bin/baky
+mv main.sh baky
+sudo mv baky /usr/local/bin/
 ```
 
 Note: On Apple Silicon Macs, replace /usr/local/bin with /opt/homebrew/bin
@@ -52,9 +53,14 @@ Note: On Apple Silicon Macs, replace /usr/local/bin with /opt/homebrew/bin
 baky vim myfile.txt
 ```
 
-### Quick Installation
+## Considerations
 
-```bash
-curl -sSL https://raw.githubusercontent.com/Josedzzz/baky/main/main.sh -o /usr/local/bin/backy && \
-sudo chmod +x /usr/local/bin/baky
-```
+Since the project is still in early development, there may be bugs or areas where things could be done better. Suggestions, issues, and contributions are more than welcome!
+
+## Contributions
+
+Contributions are welcome! Feel free to fork this repo, submit pull requests, or open issues for bugs and improvements.
+
+## <3
+
+Developed with love for learning.
