@@ -1,0 +1,43 @@
+# -------------------------
+# OS / Editor junk
+# -------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.swp
+*.swo
+*~
+# VSCode / JetBrains / etc.
+.vscode/
+.idea/
+
+# -------------------------
+# Script-generated backups
+# -------------------------
+*.bak
+*.bak.*
+*.backup
+*.tmp
+*~
+
+# -------------------------
+# Test files (local only)
+# -------------------------
+testfile.txt
+test-*.txt
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+
+# -------------------------
+# System package build dirs
+# -------------------------
+dist/
+build/
+pkg/
+*.deb
+*.rpm
+
+
