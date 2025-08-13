@@ -41,20 +41,25 @@ else
   exit 1
 fi
 
+# Create backups/ directory in current working dir
+BACKUP_DIR="./backups"
+mkdir -p "$BACKUP_DIR"
+
 # Make a timestamped backup next to the file
 TS=$(date -u +"%Y%m%dT%H%M%SZ")
-BACKUP="${FILE}.${TS}.bak"
+BASENAME=$(basename "$FILE")
+BACKUP_PATH="${BACKUP_DIR}/${BASENAME}.${TS}.bak"
 
-# Preserve perms/timestamps with -p (portable); -a would be nicer if available
-cp -p -- "$FILE" "$BACKUP" 2>/dev/null || cp -p "$FILE" "$BACKUP"
-echo "Backup created: $BACKUP"
+# Preserve perms/timestamps
+cp -p -- "$FILE" "$BACKUP_PATH"
+echo "Backup created: $BACKUP_PATH"
 
 # Record original checksum
 ORIGSUM=$("${SUM[@]}" "$FILE" | awk '{print $1}')
 
 # Run the editor; if it fails, keep the backup and propagate the error
 if ! "${EDITOR_CMD[@]}" "$FILE"; then
-  echo "Editor failed; keeping backup at $BACKUP" >&2
+  echo "Editor failed; keeping backup at $BACKUP_PATH" >&2
   exit 2
 fi
 
@@ -63,7 +68,7 @@ NEWSUM=$("${SUM[@]}" "$FILE" | awk '{print $1}')
 
 if [[ "$ORIGSUM" == "$NEWSUM" ]]; then
   echo "No changes detected, removing backup..."
-  rm -f -- "$BACKUP"
+  rm -f -- "$BACKUP_PATH"
 else
-  echo "Changes detected, backup kept: $BACKUP"
+  echo "Changes detected, backup kept: $BACKUP_PATH"
 fi
