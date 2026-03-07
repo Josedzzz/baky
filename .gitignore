@@ -1,0 +1,49 @@
+# =========================
+# General
+# =========================
+.env
+.env.*
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Go
+# =========================
+# Binaries
+bin/
+dist/
+
+# Test cache
+*.test
+coverage.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# =========================
+# Docker
+# =========================
+*.pid
+docker-compose.override.yml
+
+# =========================
+# IDEs
+# =========================
+.vscode/
+.idea/
+*.swp
+
+# =========================
+# Local configuration files
+# =========================
+baki_config
