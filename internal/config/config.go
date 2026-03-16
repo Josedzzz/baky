@@ -42,3 +42,14 @@ func GetPaths() ([]string, error) {
 	}
 	return paths, nil
 }
+
+// SavePaths overwrites the config file with the provided slice of paths
+func SavePaths(paths []string) error {
+	var sb strings.Builder
+	for _, p := range paths {
+		if p != "" {
+			sb.WriteString(p + "\n")
+		}
+	}
+	return os.WriteFile(ConfigFile, []byte(sb.String()), 0o644)
+}
