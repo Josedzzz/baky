@@ -1,7 +1,10 @@
 // Package config provides utilities for managin application configuration
 package config
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 const ConfigFile = "baki_config"
 
@@ -19,4 +22,23 @@ func AddPath(path string) error {
 	return nil
 }
 
-// TODO: Get paths func
+// GetPaths reads all paths from the config file and returns them as a slice of strings
+func GetPaths() ([]string, error) {
+	data, err := os.ReadFile(ConfigFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var paths []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			paths = append(paths, trimmed)
+		}
+	}
+	return paths, nil
+}

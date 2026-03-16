@@ -25,6 +25,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == inputView {
 			return m.handleInputUpdate(msg)
 		}
+		if m.state == viewPathsView {
+			return m.handleViewPathsUpdate(msg)
+		}
 		return m.HandleMenuUpdate(msg)
 	}
 	return m, nil
@@ -50,11 +53,21 @@ func (m Model) HandleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
-			if m.choices[m.cursor] == "Add Backup Path" {
+			choice := m.choices[m.cursor]
+			switch choice {
+			case "Add Backup Path":
 				m.state = inputView
 				return m, nil
-			}
-			if m.choices[m.cursor] == "Exit" {
+			case "View Paths":
+				paths, err := config.GetPaths()
+				if err != nil {
+					m.message = "Error getting paths"
+				} else {
+					m.paths = paths
+					m.state = viewPathsView
+				}
+				return m, nil
+			case "Exit":
 				m.quitting = true
 				return m, tea.Quit
 			}
@@ -67,6 +80,20 @@ func (m Model) HandleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	if m.state == inputView {
 		return fmt.Sprintf("Enter path:\n\n%s\n\n(esc to cancel)", m.pathInput.View())
+	}
+
+	if m.state == viewPathsView {
+		var sb strings.Builder
+		sb.WriteString("Backup Paths:\n\n")
+		if len(m.paths) == 0 {
+			sb.WriteString("No paths added yet.\n")
+		} else {
+			for _, p := range m.paths {
+				fmt.Fprintf(&sb, "- %s\n", p)
+			}
+		}
+		sb.WriteString("\n(esc to return to menu)")
+		return sb.String()
 	}
 
 	var sb strings.Builder
@@ -113,4 +140,13 @@ func (m Model) handleInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	m.pathInput, cmd = m.pathInput.Update(msg)
 	return m, cmd
+}
+
+// handleViewPathsUpdate processes key messages when viewing paths
+func (m Model) handleViewPathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.state = menuView
+	}
+	return m, nil
 }

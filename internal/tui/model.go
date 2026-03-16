@@ -11,6 +11,9 @@ const (
 
 	// inputView is the state where the user provides input, such as backup path
 	inputView
+
+	// viewPathsView is the state where the user views the current backup paths
+	viewPathsView
 )
 
 // Model represents the state of the TUI
@@ -20,6 +23,7 @@ type Model struct {
 	quitting  bool
 	state     sessionState
 	pathInput textinput.Model
+	paths     []string
 	message   string
 }
 
@@ -30,7 +34,7 @@ func NewModel() Model {
 	ti.Focus()
 
 	return Model{
-		choices:   []string{"Add Backup Path", "Backup Files", "Configure NAS", "View Logs", "Exit"},
+		choices:   []string{"Add Backup Path", "View Paths", "Backup Files", "Configure NAS", "Exit"},
 		pathInput: ti,
 		state:     menuView,
 	}
