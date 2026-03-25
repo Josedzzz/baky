@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Josedzzz/baky/internal/config"
@@ -42,6 +43,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleInputUpdate(msg)
 		case managePathsView:
 			return m.handleManagePathsUpdate(msg)
+		case configureNasView:
+			return m.handleConfigureNasUpdate(msg)
+		case nasInputView:
+			return m.handleNasInputUpdate(msg)
 		default:
 			return m.HandleMenuUpdate(msg)
 		}
@@ -70,6 +75,11 @@ func (m Model) HandleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.paths = paths
 				m.state = managePathsView
 				m.pathsCursor = 0
+				m.message = ""
+			case "Configure NAS":
+				nasPath, _ := config.GetNasPath()
+				m.nasPath = nasPath
+				m.state = configureNasView
 				m.message = ""
 			case "Exit":
 				m.quitting = true
@@ -129,8 +139,31 @@ func (m Model) View() string {
 			}
 			body.WriteString(style.Render(m.message) + "\n")
 		}
-
 		body.WriteString(footerStyle.Render("a: add • e: edit • d: delete • esc: back"))
+
+	case configureNasView:
+		body.WriteString(titleStyle.Render(" CONFIGURE NAS ") + "\n\n")
+		displayPath := m.nasPath
+		if displayPath == "" {
+			displayPath = "Not configured"
+		}
+		fmt.Fprintf(&body, "Current NAS Path: %s\n\n", displayPath)
+		if m.message != "" {
+			style := errorStyle
+			if m.isSuccess {
+				style = successStyle
+			}
+			body.WriteString(style.Render(m.message) + "\n\n")
+		}
+		body.WriteString(footerStyle.Render("e: edit • t: test • esc: back"))
+
+	case nasInputView:
+		body.WriteString(titleStyle.Render(" EDIT NAS PATH ") + "\n\n")
+		fmt.Fprintf(&body,
+			"Enter NAS share path:\n\n%s\n\n%s",
+			m.nasInput.View(),
+			footerStyle.Render("(esc to cancel • enter to save)"),
+		)
 
 	case menuView:
 		body.WriteString(titleStyle.Render(" MAIN MENU ") + "\n\n")
@@ -176,7 +209,6 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "d":
 		if len(m.paths) > 0 {
-			// Remove from slice
 			m.paths = append(m.paths[:m.pathsCursor], m.paths[m.pathsCursor+1:]...)
 			if m.pathsCursor >= len(m.paths) && m.pathsCursor > 0 {
 				m.pathsCursor--
@@ -190,6 +222,64 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.message = ""
 	}
 	return m, nil
+}
+
+// handleConfigureNasUpdate handles key messages in the NAS config view
+func (m Model) handleConfigureNasUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "e":
+		m.state = nasInputView
+		m.nasInput.SetValue(m.nasPath)
+		m.nasInput.Focus()
+		m.message = ""
+	case "t":
+		if m.nasPath == "" {
+			m.message = "NAS path not configured"
+			m.isSuccess = false
+			return m, nil
+		}
+		info, err := os.Stat(m.nasPath)
+		if err != nil {
+			m.message = "Error: " + err.Error()
+			m.isSuccess = false
+		} else if !info.IsDir() {
+			m.message = "Path is not a directory"
+			m.isSuccess = false
+		} else {
+			m.message = "NAS path is accessible!"
+			m.isSuccess = true
+		}
+	case "esc":
+		m.state = menuView
+		m.message = ""
+	}
+	return m, nil
+}
+
+// handleNasInputUpdate handles NAS path input
+func (m Model) handleNasInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch msg.String() {
+	case "esc":
+		m.state = configureNasView
+		return m, nil
+	case "enter":
+		val := m.nasInput.Value()
+		if val != "" {
+			if err := config.SaveNasPath(val); err != nil {
+				m.message = "Error saving NAS path"
+				m.isSuccess = false
+			} else {
+				m.nasPath = val
+				m.message = "NAS path updated"
+				m.isSuccess = true
+			}
+			m.state = configureNasView
+		}
+		return m, nil
+	}
+	m.nasInput, cmd = m.nasInput.Update(msg)
+	return m, cmd
 }
 
 // handleInputUpdate processes key messages when typing a path

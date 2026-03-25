@@ -14,8 +14,14 @@ const (
 	// managePathsView is the unified state where the user manages backup paths
 	managePathsView
 
+	// configureNasView is the state where the user configures the NAS path
+	configureNasView
+
 	// inputView is a sub-state for when the user is typing a path
 	inputView
+
+	// nasInputView is a sub-state for when the user is typing a NAS path
+	nasInputView
 )
 
 // Model represents the state of the TUI
@@ -25,9 +31,11 @@ type Model struct {
 	quitting  bool
 	state     sessionState
 	pathInput textinput.Model
+	nasInput  textinput.Model
 	paths     []string
 	pathsCursor int // cursor for the paths list
 	editingIndex int // index of the path being edited (-1 for new)
+	nasPath   string
 	message   string
 	isSuccess bool
 	width     int
@@ -39,10 +47,14 @@ func NewModel() Model {
 	ti := textinput.New()
 	ti.Placeholder = "/path/to/backup"
 
+	ni := textinput.New()
+	ni.Placeholder = "/path/to/nas"
+
 	return Model{
-		choices:   []string{"Manage Paths", "Backup Files", "Configure NAS", "Exit"},
-		pathInput: ti,
-		state:     menuView,
+		choices:      []string{"Manage Paths", "Backup Files", "Configure NAS", "Exit"},
+		pathInput:    ti,
+		nasInput:     ni,
+		state:        menuView,
 		editingIndex: -1,
 	}
 }
