@@ -46,4 +46,4 @@ docker-compose.override.yml
 # =========================
 # Local configuration files
 # =========================
-baki_config
+config.json
