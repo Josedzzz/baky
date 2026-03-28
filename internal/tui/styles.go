@@ -31,6 +31,16 @@ var (
 				Foreground(primaryColor).
 				Bold(true)
 
+	headerStyle = lipgloss.NewStyle().
+			Foreground(primaryColor).
+			Bold(true).
+			MarginTop(1).
+			MarginBottom(1)
+
+	processingStyle = lipgloss.NewStyle().
+			Foreground(secondaryColor).
+			Italic(true)
+
 	footerStyle = lipgloss.NewStyle().
 			Foreground(grayColor).
 			Italic(true).

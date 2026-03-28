@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Josedzzz/baky/internal/backup"
 	"github.com/Josedzzz/baky/internal/config"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,6 +22,11 @@ const logo = `
  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
 `
 
+type backupFinishedMsg struct {
+	err  error
+	path string
+}
+
 // Init initializes the TUI model and returns the initial command
 func (m Model) Init() tea.Cmd {
 	return textinput.Blink
@@ -32,6 +38,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, nil
+
+	case backupFinishedMsg:
+		m.isProcessing = false
+		if msg.err != nil {
+			m.message = "Backup failed: " + msg.err.Error()
+			m.isSuccess = false
+		} else {
+			m.message = "Backup finished successfully!"
+			m.isSuccess = true
+			// Refresh history and paths
+			hist, _ := config.LoadHistory()
+			m.history = hist.Events
+			paths, _ := config.GetPaths()
+			m.paths = paths
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -47,6 +69,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleConfigureNasUpdate(msg)
 		case nasInputView:
 			return m.handleNasInputUpdate(msg)
+		case backupFilesView:
+			return m.handleBackupFilesUpdate(msg)
 		default:
 			return m.HandleMenuUpdate(msg)
 		}
@@ -74,6 +98,14 @@ func (m Model) HandleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 				paths, _ := config.GetPaths()
 				m.paths = paths
 				m.state = managePathsView
+				m.pathsCursor = 0
+				m.message = ""
+			case "Backup Files":
+				paths, _ := config.GetPaths()
+				m.paths = paths
+				hist, _ := config.LoadHistory()
+				m.history = hist.Events
+				m.state = backupFilesView
 				m.pathsCursor = 0
 				m.message = ""
 			case "Configure NAS":
@@ -109,11 +141,11 @@ func (m Model) View() string {
 			title = " UPDATE BACKUP PATH "
 		}
 		body.WriteString(titleStyle.Render(title) + "\n\n")
-		fmt.Fprintf(&body,
+		body.WriteString(fmt.Sprintf(
 			"Enter path:\n\n%s\n\n%s",
 			m.pathInput.View(),
 			footerStyle.Render("(esc to cancel • enter to save)"),
-		)
+		))
 
 	case managePathsView:
 		body.WriteString(titleStyle.Render(" MANAGE BACKUP PATHS ") + "\n\n")
@@ -127,11 +159,14 @@ func (m Model) View() string {
 					cursor = ">"
 					style = selectedItemStyle
 				}
-				body.WriteString(style.Render(fmt.Sprintf("%s %s", cursor, p)) + "\n")
+				last := "Never"
+				if !p.LastBackup.IsZero() {
+					last = p.LastBackup.Format("2006-01-02 15:04")
+				}
+				body.WriteString(style.Render(fmt.Sprintf("%s %-20s [%s] (Last: %s)", cursor, p.Path, p.Frequency, last)) + "\n")
 			}
 			body.WriteString("\n")
 		}
-
 		if m.message != "" {
 			style := errorStyle
 			if m.isSuccess {
@@ -139,7 +174,56 @@ func (m Model) View() string {
 			}
 			body.WriteString(style.Render(m.message) + "\n")
 		}
-		body.WriteString(footerStyle.Render("a: add • e: edit • d: delete • esc: back"))
+		body.WriteString(footerStyle.Render("a: add • e: edit • f: cycle freq • d: delete • esc: back"))
+
+	case backupFilesView:
+		body.WriteString(titleStyle.Render(" BACKUP FILES ") + "\n\n")
+		if len(m.paths) == 0 {
+			body.WriteString("No paths configured to backup.\n\n")
+		} else {
+			body.WriteString(headerStyle.Render("Select path for manual backup:") + "\n")
+			for i, p := range m.paths {
+				cursor := " "
+				style := itemStyle
+				if m.pathsCursor == i {
+					cursor = ">"
+					style = selectedItemStyle
+				}
+				body.WriteString(style.Render(fmt.Sprintf("%s %s", cursor, p.Path)) + "\n")
+			}
+			body.WriteString("\n")
+		}
+
+		if m.isProcessing {
+			body.WriteString(processingStyle.Render("Processing backup... Please wait.") + "\n\n")
+		} else if m.message != "" {
+			style := errorStyle
+			if m.isSuccess {
+				style = successStyle
+			}
+			body.WriteString(style.Render(m.message) + "\n\n")
+		}
+
+		body.WriteString(headerStyle.Render("Recent Backups:") + "\n")
+		if len(m.history) == 0 {
+			body.WriteString("No history available.\n")
+		} else {
+			count := 0
+			for _, h := range m.history {
+				if count >= 5 {
+					break
+				}
+				status := "OK"
+				style := successStyle
+				if h.Result != "success" {
+					status = "FAIL"
+					style = errorStyle
+				}
+				body.WriteString(fmt.Sprintf("%s [%s] %s\n", h.Timestamp.Format("01-02 15:04"), style.Render(status), h.Path))
+				count++
+			}
+		}
+		body.WriteString(footerStyle.Render("\nenter: start manual backup • esc: back"))
 
 	case configureNasView:
 		body.WriteString(titleStyle.Render(" CONFIGURE NAS ") + "\n\n")
@@ -147,7 +231,8 @@ func (m Model) View() string {
 		if displayPath == "" {
 			displayPath = "Not configured"
 		}
-		fmt.Fprintf(&body, "Current NAS Path: %s\n\n", displayPath)
+		body.WriteString(fmt.Sprintf("Current NAS Path: %s\n\n", displayPath))
+
 		if m.message != "" {
 			style := errorStyle
 			if m.isSuccess {
@@ -204,8 +289,24 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.paths) > 0 {
 			m.state = inputView
 			m.editingIndex = m.pathsCursor
-			m.pathInput.SetValue(m.paths[m.pathsCursor])
+			m.pathInput.SetValue(m.paths[m.pathsCursor].Path)
 			m.pathInput.Focus()
+		}
+	case "f":
+		if len(m.paths) > 0 {
+			// Cycle frequency
+			p := &m.paths[m.pathsCursor]
+			switch p.Frequency {
+			case config.FreqDaily:
+				p.Frequency = config.FreqWeekly
+			case config.FreqWeekly:
+				p.Frequency = config.FreqOnChange
+			case config.FreqOnChange:
+				p.Frequency = config.FreqDaily
+			default:
+				p.Frequency = config.FreqDaily
+			}
+			config.SavePaths(m.paths)
 		}
 	case "d":
 		if len(m.paths) > 0 {
@@ -216,6 +317,33 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			config.SavePaths(m.paths)
 			m.message = "Path deleted"
 			m.isSuccess = true
+		}
+	case "esc":
+		m.state = menuView
+		m.message = ""
+	}
+	return m, nil
+}
+
+func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.pathsCursor > 0 {
+			m.pathsCursor--
+		}
+	case "down", "j":
+		if m.pathsCursor < len(m.paths)-1 {
+			m.pathsCursor++
+		}
+	case "enter":
+		if len(m.paths) > 0 && !m.isProcessing {
+			m.isProcessing = true
+			m.message = ""
+			path := m.paths[m.pathsCursor].Path
+			return m, func() tea.Msg {
+				err := backup.RunBackup(path)
+				return backupFinishedMsg{err: err, path: path}
+			}
 		}
 	case "esc":
 		m.state = menuView
@@ -295,10 +423,10 @@ func (m Model) handleInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		val := m.pathInput.Value()
 		if val != "" {
 			if m.editingIndex == -1 {
-				m.paths = append(m.paths, val)
+				m.paths = append(m.paths, config.BackupPathConfig{Path: val, Frequency: config.FreqDaily})
 				m.message = "Path added"
 			} else {
-				m.paths[m.editingIndex] = val
+				m.paths[m.editingIndex].Path = val
 				m.message = "Path updated"
 			}
 			config.SavePaths(m.paths)

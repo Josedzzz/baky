@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/Josedzzz/baky/internal/config"
 	"github.com/charmbracelet/bubbles/textinput"
 )
 
@@ -17,6 +18,9 @@ const (
 	// configureNasView is the state where the user configures the NAS path
 	configureNasView
 
+	// backupFilesView is the state where the user runs manual backups
+	backupFilesView
+
 	// inputView is a sub-state for when the user is typing a path
 	inputView
 
@@ -26,20 +30,22 @@ const (
 
 // Model represents the state of the TUI
 type Model struct {
-	choices   []string
-	cursor    int
-	quitting  bool
-	state     sessionState
-	pathInput textinput.Model
-	nasInput  textinput.Model
-	paths     []string
-	pathsCursor int // cursor for the paths list
+	choices      []string
+	cursor       int
+	quitting     bool
+	state        sessionState
+	pathInput    textinput.Model
+	nasInput     textinput.Model
+	paths        []config.BackupPathConfig
+	pathsCursor  int // cursor for the paths list
 	editingIndex int // index of the path being edited (-1 for new)
-	nasPath   string
-	message   string
-	isSuccess bool
-	width     int
-	height    int
+	nasPath      string
+	history      []config.BackupEvent
+	isProcessing bool
+	message      string
+	isSuccess    bool
+	width        int
+	height       int
 }
 
 // NewModel init and returns a new Model with default values
