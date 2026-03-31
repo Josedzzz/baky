@@ -49,8 +49,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.message = "Backup finished successfully!"
 			m.isSuccess = true
 			// Refresh history and paths
-			hist, _ := config.LoadHistory()
-			m.history = hist.Events
+			hist, _ := config.GetHistory()
+			m.history = hist
 			paths, _ := config.GetPaths()
 			m.paths = paths
 		}
@@ -103,9 +103,10 @@ func (m Model) HandleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "Backup Files":
 				paths, _ := config.GetPaths()
 				m.paths = paths
-				hist, _ := config.LoadHistory()
-				m.history = hist.Events
+				hist, _ := config.GetHistory()
+				m.history = hist
 				m.state = backupFilesView
+
 				m.pathsCursor = 0
 				m.message = ""
 			case "Configure NAS":
@@ -141,11 +142,11 @@ func (m Model) View() string {
 			title = " UPDATE BACKUP PATH "
 		}
 		body.WriteString(titleStyle.Render(title) + "\n\n")
-		body.WriteString(fmt.Sprintf(
+		fmt.Fprintf(&body,
 			"Enter path:\n\n%s\n\n%s",
 			m.pathInput.View(),
 			footerStyle.Render("(esc to cancel • enter to save)"),
-		))
+		)
 
 	case managePathsView:
 		body.WriteString(titleStyle.Render(" MANAGE BACKUP PATHS ") + "\n\n")
@@ -219,7 +220,7 @@ func (m Model) View() string {
 					status = "FAIL"
 					style = errorStyle
 				}
-				body.WriteString(fmt.Sprintf("%s [%s] %s\n", h.Timestamp.Format("01-02 15:04"), style.Render(status), h.Path))
+				fmt.Fprintf(&body, "%s [%s] %s\n", h.Timestamp.Format("01-02 15:04"), style.Render(status), h.Path)
 				count++
 			}
 		}
@@ -231,7 +232,7 @@ func (m Model) View() string {
 		if displayPath == "" {
 			displayPath = "Not configured"
 		}
-		body.WriteString(fmt.Sprintf("Current NAS Path: %s\n\n", displayPath))
+		fmt.Fprintf(&body, "Current NAS Path: %s\n\n", displayPath)
 
 		if m.message != "" {
 			style := errorStyle

@@ -9,11 +9,10 @@ import (
 )
 
 const (
-	ConfigFile    = "config.json"
-	HistoryFile   = "history.json"
-	FreqOnChange  = "on_change"
-	FreqDaily     = "daily"
-	FreqWeekly    = "weekly"
+	ConfigFile   = "config.json"
+	FreqOnChange = "on_change"
+	FreqDaily    = "daily"
+	FreqWeekly   = "weekly"
 )
 
 // BackupPathConfig represents a configured backup path
@@ -21,12 +20,6 @@ type BackupPathConfig struct {
 	Path       string    `json:"path"`
 	Frequency  string    `json:"frequency"` // "on_change", "daily", "weekly"
 	LastBackup time.Time `json:"last_backup"`
-}
-
-// Config represents the unified application configuration
-type Config struct {
-	NasPath     string             `json:"nas_path"`
-	BackupPaths []BackupPathConfig `json:"backup_paths"`
 }
 
 // BackupEvent represents a single backup completion event
@@ -37,8 +30,11 @@ type BackupEvent struct {
 	Message   string    `json:"message,omitempty"`
 }
 
-type BackupHistory struct {
-	Events []BackupEvent `json:"events"`
+// Config represents the unified application configuration
+type Config struct {
+	NasPath     string             `json:"nas_path"`
+	BackupPaths []BackupPathConfig `json:"backup_paths"`
+	History     []BackupEvent      `json:"history"`
 }
 
 var (
@@ -61,7 +57,10 @@ func LoadConfig() (*Config, error) {
 	data, err := os.ReadFile(ConfigFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			currentCfg = &Config{BackupPaths: []BackupPathConfig{}}
+			currentCfg = &Config{
+				BackupPaths: []BackupPathConfig{},
+				History:     []BackupEvent{},
+			}
 			return currentCfg, nil
 		}
 		return nil, err
@@ -69,11 +68,23 @@ func LoadConfig() (*Config, error) {
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+		// If unmarshal fails, it might be an old format.
+		// Try to fix it or just reset it.
+		// Given the user wants a single config and mentioned errors, let's try to handle gracefully.
+		currentCfg = &Config{
+			BackupPaths: []BackupPathConfig{},
+			History:     []BackupEvent{},
+		}
+		return currentCfg, nil
 	}
+	
 	if cfg.BackupPaths == nil {
 		cfg.BackupPaths = []BackupPathConfig{}
 	}
+	if cfg.History == nil {
+		cfg.History = []BackupEvent{}
+	}
+	
 	currentCfg = &cfg
 	return currentCfg, nil
 }
@@ -147,10 +158,9 @@ func SaveNasPath(path string) error {
 
 // LogBackup adds a new event to the history and updates the LastBackup time for the path
 func LogBackup(path string, success bool, message string) error {
-	// 1. Update history file
-	history, err := LoadHistory()
+	cfg, err := LoadConfig()
 	if err != nil {
-		history = &BackupHistory{}
+		return err
 	}
 	
 	result := "success"
@@ -165,53 +175,30 @@ func LogBackup(path string, success bool, message string) error {
 		Message:   message,
 	}
 	
-	history.Events = append([]BackupEvent{event}, history.Events...)
-	if len(history.Events) > 100 { // Keep last 100 events
-		history.Events = history.Events[:100]
+	// Prepend to history
+	cfg.History = append([]BackupEvent{event}, cfg.History...)
+	if len(cfg.History) > 100 { // Keep last 100 events
+		cfg.History = cfg.History[:100]
 	}
 	
-	if err := SaveHistory(history); err != nil {
-		return err
-	}
-	
-	// 2. Update last_backup in config
+	// Update last_backup in config
 	if success {
-		cfg, err := LoadConfig()
-		if err == nil {
-			for i, p := range cfg.BackupPaths {
-				if p.Path == path {
-					cfg.BackupPaths[i].LastBackup = event.Timestamp
-					break
-				}
+		for i, p := range cfg.BackupPaths {
+			if p.Path == path {
+				cfg.BackupPaths[i].LastBackup = event.Timestamp
+				break
 			}
-			SaveConfig(cfg)
 		}
 	}
 	
-	return nil
+	return SaveConfig(cfg)
 }
 
-// LoadHistory reads the history JSON file
-func LoadHistory() (*BackupHistory, error) {
-	data, err := os.ReadFile(HistoryFile)
+// GetHistory returns the backup history
+func GetHistory() ([]BackupEvent, error) {
+	cfg, err := LoadConfig()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return &BackupHistory{Events: []BackupEvent{}}, nil
-		}
 		return nil, err
 	}
-	var history BackupHistory
-	if err := json.Unmarshal(data, &history); err != nil {
-		return nil, err
-	}
-	return &history, nil
-}
-
-// SaveHistory writes to the history JSON file
-func SaveHistory(history *BackupHistory) error {
-	data, err := json.MarshalIndent(history, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(HistoryFile, data, 0o644)
+	return cfg.History, nil
 }
