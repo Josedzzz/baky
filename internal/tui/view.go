@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Josedzzz/baky/internal/backup"
 	"github.com/Josedzzz/baky/internal/config"
@@ -211,19 +212,30 @@ func (m Model) View() string {
 		} else {
 			count := 0
 			for _, h := range m.history {
-				if count >= 5 {
+				if count >= 3 {
 					break
 				}
+
 				status := "OK"
-				style := successStyle
+				card := logSuccessCard
 				if h.Result != "success" {
-					status = "FAIL"
-					style = errorStyle
+					status = "ERROR"
+					card = logErrorCard
 				}
-				fmt.Fprintf(&body, "%s [%s] %s\n", h.Timestamp.Format("01-02 15:04"), style.Render(status), h.Path)
+
+				timestamp := m.formatRelativeTime(h.Timestamp)
+
+				// Create a "bubble" or card for the log entry
+				msg := fmt.Sprintf("%s • %s\n%s",
+					card.Render(status),
+					logTimeStyle.Render(timestamp),
+					itemStyle.Render(h.Path))
+
+				body.WriteString(msg + "\n")
 				count++
 			}
 		}
+
 		body.WriteString(footerStyle.Render("\nenter: start manual backup • esc: back"))
 
 	case configureNasView:
@@ -439,4 +451,22 @@ func (m Model) handleInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.pathInput, cmd = m.pathInput.Update(msg)
 	return m, cmd
+}
+
+func (m Model) formatRelativeTime(t time.Time) string {
+	if t.IsZero() {
+		return "Never"
+	}
+
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "Just now"
+	case diff < time.Hour:
+		return fmt.Sprintf("%d mins ago", int(diff.Minutes()))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%d hours ago", int(diff.Hours()))
+	default:
+		return t.Format("Jan 02 15:04")
+	}
 }

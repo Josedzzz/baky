@@ -62,4 +62,20 @@ var (
 			Foreground(lipgloss.Color("#FF0000")).
 			Bold(true).
 			MarginTop(1)
+
+	// Log Card Styles
+	logCardStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			MarginBottom(1).
+			Border(lipgloss.NormalBorder(), false, false, false, true)
+
+	logSuccessCard = logCardStyle.Copy().
+			BorderForeground(secondaryColor)
+
+	logErrorCard = logCardStyle.Copy().
+			BorderForeground(lipgloss.Color("#FF0000"))
+
+	logTimeStyle = lipgloss.NewStyle().
+			Foreground(grayColor).
+			Italic(true)
 )
