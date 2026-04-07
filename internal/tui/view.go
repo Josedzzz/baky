@@ -206,37 +206,59 @@ func (m Model) View() string {
 			body.WriteString(style.Render(m.message) + "\n\n")
 		}
 
-		body.WriteString(headerStyle.Render("Recent Backups:") + "\n")
+		body.WriteString(headerStyle.Render("Recent Backups (scrollable):") + "\n")
 		if len(m.history) == 0 {
 			body.WriteString("No history available.\n")
 		} else {
-			count := 0
+			// Build all log entries
+			var logLines []string
 			for _, h := range m.history {
-				if count >= 3 {
-					break
-				}
-
-				status := "OK"
-				card := logSuccessCard
+				status := "✓"
 				if h.Result != "success" {
-					status = "ERROR"
-					card = logErrorCard
+					status = "✗"
 				}
 
 				timestamp := m.formatRelativeTime(h.Timestamp)
 
-				// Create a "bubble" or card for the log entry
-				msg := fmt.Sprintf("%s • %s\n%s",
-					card.Render(status),
-					logTimeStyle.Render(timestamp),
-					itemStyle.Render(h.Path))
+				// Single line format: [status] timestamp • path
+				logLine := fmt.Sprintf("[%s] %s • %s", status, timestamp, h.Path)
 
-				body.WriteString(msg + "\n")
-				count++
+				// Apply styling based on result
+				if h.Result != "success" {
+					logLine = logErrorLineStyle.Render(logLine)
+				} else {
+					logLine = logSuccessLineStyle.Render(logLine)
+				}
+
+				logLines = append(logLines, logLine)
+			}
+
+			// Show scrollable section (max 5 lines visible)
+			maxVisible := 5
+			startIdx := m.historyScroll
+			if startIdx >= len(logLines) {
+				startIdx = len(logLines) - maxVisible
+			}
+			if startIdx < 0 {
+				startIdx = 0
+			}
+
+			endIdx := startIdx + maxVisible
+			endIdx = min(endIdx, len(logLines))
+
+			// Display visible logs
+			for i := startIdx; i < endIdx; i++ {
+				body.WriteString(logLines[i] + "\n")
+			}
+
+			// Show scroll indicator if needed
+			if len(logLines) > maxVisible {
+				scrollInfo := fmt.Sprintf("  ↑↓ %d/%d items", endIdx, len(logLines))
+				body.WriteString(logScrollIndicatorStyle.Render(scrollInfo) + "\n")
 			}
 		}
 
-		body.WriteString(footerStyle.Render("\nenter: start manual backup • esc: back"))
+		body.WriteString(footerStyle.Render("\nenter: start manual backup • pgup/pgdn: scroll logs • esc: back"))
 
 	case configureNasView:
 		body.WriteString(titleStyle.Render(" CONFIGURE NAS ") + "\n\n")
@@ -343,10 +365,24 @@ func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.pathsCursor > 0 {
 			m.pathsCursor--
+			m.historyScroll = 0 // Reset scroll when changing paths
 		}
 	case "down", "j":
 		if m.pathsCursor < len(m.paths)-1 {
 			m.pathsCursor++
+			m.historyScroll = 0 // Reset scroll when changing paths
+		}
+	case "pgup", "shift+up":
+		// Scroll history up
+		if m.historyScroll > 0 {
+			m.historyScroll--
+		}
+	case "pgdn", "shift+down":
+		// Scroll history down
+		maxScroll := len(m.history) - 5
+		maxScroll = max(maxScroll, 0)
+		if m.historyScroll < maxScroll {
+			m.historyScroll++
 		}
 	case "enter":
 		if len(m.paths) > 0 && !m.isProcessing {
@@ -361,6 +397,7 @@ func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.state = menuView
 		m.message = ""
+		m.historyScroll = 0 // Reset scroll when leaving view
 	}
 	return m, nil
 }

@@ -30,22 +30,23 @@ const (
 
 // Model represents the state of the TUI
 type Model struct {
-	choices      []string
-	cursor       int
-	quitting     bool
-	state        sessionState
-	pathInput    textinput.Model
-	nasInput     textinput.Model
-	paths        []config.BackupPathConfig
-	pathsCursor  int // cursor for the paths list
-	editingIndex int // index of the path being edited (-1 for new)
-	nasPath      string
-	history      []config.BackupEvent
-	isProcessing bool
-	message      string
-	isSuccess    bool
-	width        int
-	height       int
+	choices       []string
+	cursor        int
+	quitting      bool
+	state         sessionState
+	pathInput     textinput.Model
+	nasInput      textinput.Model
+	paths         []config.BackupPathConfig
+	pathsCursor   int // cursor for the paths list
+	editingIndex  int // index of the path being edited (-1 for new)
+	nasPath       string
+	history       []config.BackupEvent
+	isProcessing  bool
+	message       string
+	isSuccess     bool
+	width         int
+	height        int
+	historyScroll int // scroll position for history
 }
 
 // NewModel init and returns a new Model with default values
