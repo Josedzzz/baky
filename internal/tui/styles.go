@@ -4,10 +4,10 @@ import "github.com/charmbracelet/lipgloss"
 
 var (
 	// Colors
-	primaryColor   = lipgloss.Color("#7D56F4")
-	secondaryColor = lipgloss.Color("#04B575")
-	whiteColor     = lipgloss.Color("#EEEEEE")
-	grayColor      = lipgloss.Color("#777777")
+	primaryColor   = lipgloss.Color("#73D1FF")
+	secondaryColor = lipgloss.Color("#ADE8FF")
+	whiteColor     = lipgloss.Color("#FFFFFF")
+	grayColor      = lipgloss.Color("#A0A0A0")
 
 	// Styles
 	titleStyle = lipgloss.NewStyle().
@@ -15,8 +15,15 @@ var (
 			Foreground(whiteColor).
 			Background(primaryColor).
 			Padding(0, 2).
-			MarginBottom(1).
-			Align(lipgloss.Center)
+			MarginBottom(1)
+
+	miniLogoStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(primaryColor).
+			Border(lipgloss.NormalBorder(), false, false, false, true).
+			BorderForeground(secondaryColor).
+			PaddingLeft(1).
+			MarginBottom(1)
 
 	asciiStyle = lipgloss.NewStyle().
 			Foreground(primaryColor).
@@ -63,15 +70,19 @@ var (
 			Bold(true).
 			MarginTop(1)
 
-	// Log Styles
-	logSuccessLineStyle = lipgloss.NewStyle().
-				Foreground(secondaryColor)
+	// Log Card Styles
+	logCardStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			MarginBottom(1).
+			Border(lipgloss.NormalBorder(), false, false, false, true)
 
-	logErrorLineStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF0000"))
+	logSuccessCard = logCardStyle.
+			BorderForeground(secondaryColor)
 
-	logScrollIndicatorStyle = lipgloss.NewStyle().
-				Foreground(grayColor).
-				Italic(true).
-				MarginTop(1)
+	logErrorCard = logCardStyle.
+			BorderForeground(lipgloss.Color("#FF0000"))
+
+	logTimeStyle = lipgloss.NewStyle().
+			Foreground(grayColor).
+			Italic(true)
 )

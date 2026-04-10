@@ -23,6 +23,8 @@ const logo = `
  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
 `
 
+const miniLogo = " BAKY"
+
 type backupFinishedMsg struct {
 	err  error
 	path string
@@ -107,8 +109,8 @@ func (m Model) HandleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 				hist, _ := config.GetHistory()
 				m.history = hist
 				m.state = backupFilesView
-
 				m.pathsCursor = 0
+				m.historyOffset = 0
 				m.message = ""
 			case "Configure NAS":
 				nasPath, _ := config.GetNasPath()
@@ -134,159 +136,11 @@ func (m Model) View() string {
 	}
 
 	var body strings.Builder
-	body.WriteString(asciiStyle.Render(logo) + "\n")
 
-	switch m.state {
-	case inputView:
-		title := " ADD BACKUP PATH "
-		if m.editingIndex != -1 {
-			title = " UPDATE BACKUP PATH "
-		}
-		body.WriteString(titleStyle.Render(title) + "\n\n")
-		fmt.Fprintf(&body,
-			"Enter path:\n\n%s\n\n%s",
-			m.pathInput.View(),
-			footerStyle.Render("(esc to cancel • enter to save)"),
-		)
-
-	case managePathsView:
-		body.WriteString(titleStyle.Render(" MANAGE BACKUP PATHS ") + "\n\n")
-		if len(m.paths) == 0 {
-			body.WriteString("No paths added yet.\n\n")
-		} else {
-			for i, p := range m.paths {
-				cursor := " "
-				style := itemStyle
-				if m.pathsCursor == i {
-					cursor = ">"
-					style = selectedItemStyle
-				}
-				last := "Never"
-				if !p.LastBackup.IsZero() {
-					last = p.LastBackup.Format("2006-01-02 15:04")
-				}
-				body.WriteString(style.Render(fmt.Sprintf("%s %-20s [%s] (Last: %s)", cursor, p.Path, p.Frequency, last)) + "\n")
-			}
-			body.WriteString("\n")
-		}
-		if m.message != "" {
-			style := errorStyle
-			if m.isSuccess {
-				style = successStyle
-			}
-			body.WriteString(style.Render(m.message) + "\n")
-		}
-		body.WriteString(footerStyle.Render("a: add • e: edit • f: cycle freq • d: delete • esc: back"))
-
-	case backupFilesView:
-		body.WriteString(titleStyle.Render(" BACKUP FILES ") + "\n\n")
-		if len(m.paths) == 0 {
-			body.WriteString("No paths configured to backup.\n\n")
-		} else {
-			body.WriteString(headerStyle.Render("Select path for manual backup:") + "\n")
-			for i, p := range m.paths {
-				cursor := " "
-				style := itemStyle
-				if m.pathsCursor == i {
-					cursor = ">"
-					style = selectedItemStyle
-				}
-				body.WriteString(style.Render(fmt.Sprintf("%s %s", cursor, p.Path)) + "\n")
-			}
-			body.WriteString("\n")
-		}
-
-		if m.isProcessing {
-			body.WriteString(processingStyle.Render("Processing backup... Please wait.") + "\n\n")
-		} else if m.message != "" {
-			style := errorStyle
-			if m.isSuccess {
-				style = successStyle
-			}
-			body.WriteString(style.Render(m.message) + "\n\n")
-		}
-
-		body.WriteString(headerStyle.Render("Recent Backups (scrollable):") + "\n")
-		if len(m.history) == 0 {
-			body.WriteString("No history available.\n")
-		} else {
-			// Build all log entries
-			var logLines []string
-			for _, h := range m.history {
-				status := "✓"
-				if h.Result != "success" {
-					status = "✗"
-				}
-
-				timestamp := m.formatRelativeTime(h.Timestamp)
-
-				// Single line format: [status] timestamp • path
-				logLine := fmt.Sprintf("[%s] %s • %s", status, timestamp, h.Path)
-
-				// Apply styling based on result
-				if h.Result != "success" {
-					logLine = logErrorLineStyle.Render(logLine)
-				} else {
-					logLine = logSuccessLineStyle.Render(logLine)
-				}
-
-				logLines = append(logLines, logLine)
-			}
-
-			// Show scrollable section (max 5 lines visible)
-			maxVisible := 5
-			startIdx := m.historyScroll
-			if startIdx >= len(logLines) {
-				startIdx = len(logLines) - maxVisible
-			}
-			if startIdx < 0 {
-				startIdx = 0
-			}
-
-			endIdx := startIdx + maxVisible
-			endIdx = min(endIdx, len(logLines))
-
-			// Display visible logs
-			for i := startIdx; i < endIdx; i++ {
-				body.WriteString(logLines[i] + "\n")
-			}
-
-			// Show scroll indicator if needed
-			if len(logLines) > maxVisible {
-				scrollInfo := fmt.Sprintf("  ↑↓ %d/%d items", endIdx, len(logLines))
-				body.WriteString(logScrollIndicatorStyle.Render(scrollInfo) + "\n")
-			}
-		}
-
-		body.WriteString(footerStyle.Render("\nenter: start manual backup • pgup/pgdn: scroll logs • esc: back"))
-
-	case configureNasView:
-		body.WriteString(titleStyle.Render(" CONFIGURE NAS ") + "\n\n")
-		displayPath := m.nasPath
-		if displayPath == "" {
-			displayPath = "Not configured"
-		}
-		fmt.Fprintf(&body, "Current NAS Path: %s\n\n", displayPath)
-
-		if m.message != "" {
-			style := errorStyle
-			if m.isSuccess {
-				style = successStyle
-			}
-			body.WriteString(style.Render(m.message) + "\n\n")
-		}
-		body.WriteString(footerStyle.Render("e: edit • t: test • esc: back"))
-
-	case nasInputView:
-		body.WriteString(titleStyle.Render(" EDIT NAS PATH ") + "\n\n")
-		fmt.Fprintf(&body,
-			"Enter NAS share path:\n\n%s\n\n%s",
-			m.nasInput.View(),
-			footerStyle.Render("(esc to cancel • enter to save)"),
-		)
-
-	case menuView:
+	if m.state == menuView {
+		body.WriteString(asciiStyle.Render(logo) + "\n")
 		body.WriteString(titleStyle.Render(" MAIN MENU ") + "\n\n")
+
 		for i, choice := range m.choices {
 			if m.cursor == i {
 				fmt.Fprintf(&body, "%s\n", selectedItemStyle.Render("> "+choice))
@@ -294,9 +148,150 @@ func (m Model) View() string {
 				fmt.Fprintf(&body, "%s\n", itemStyle.Render(choice))
 			}
 		}
+
+		if m.message != "" {
+			style := errorStyle
+			if m.isSuccess {
+				style = successStyle
+			}
+			body.WriteString(style.Render(m.message) + "\n")
+		}
+
 		body.WriteString(footerStyle.Render("\n↑/↓: navigate • enter: select • q: quit"))
+	} else {
+		// Sub-menu View: Mini logo in top-left
+		body.WriteString(miniLogoStyle.Render(miniLogo) + "\n")
+
+		switch m.state {
+		case inputView:
+			title := " ADD BACKUP PATH "
+			if m.editingIndex != -1 {
+				title = " UPDATE BACKUP PATH "
+			}
+			body.WriteString(titleStyle.Render(title) + "\n\n")
+			fmt.Fprintf(&body,
+				"Enter path:\n\n%s\n\n%s",
+				m.pathInput.View(),
+				footerStyle.Render("(esc to cancel • enter to save)"),
+			)
+
+		case managePathsView:
+			body.WriteString(titleStyle.Render(" MANAGE BACKUP PATHS ") + "\n\n")
+			if len(m.paths) == 0 {
+				body.WriteString("No paths added yet.\n\n")
+			} else {
+				for i, p := range m.paths {
+					cursor := " "
+					style := itemStyle
+					if m.pathsCursor == i {
+						cursor = ">"
+						style = selectedItemStyle
+					}
+					last := "Never"
+					if !p.LastBackup.IsZero() {
+						last = p.LastBackup.Format("2006-01-02 15:04")
+					}
+					body.WriteString(style.Render(fmt.Sprintf("%s %-20s [%s] (Last: %s)", cursor, p.Path, p.Frequency, last)) + "\n")
+				}
+				body.WriteString("\n")
+			}
+			if m.message != "" {
+				style := errorStyle
+				if m.isSuccess {
+					style = successStyle
+				}
+				body.WriteString(style.Render(m.message) + "\n")
+			}
+			body.WriteString(footerStyle.Render("a: add • e: edit • f: cycle freq • d: delete • esc: back"))
+
+		case backupFilesView:
+			body.WriteString(titleStyle.Render(" BACKUP FILES ") + "\n\n")
+			if len(m.paths) == 0 {
+				body.WriteString("No paths configured to backup.\n\n")
+			} else {
+				body.WriteString(headerStyle.Render("Select path for manual backup:") + "\n")
+				// Only show up to 3 paths to save space
+				start := 0
+				if m.pathsCursor > 2 {
+					start = m.pathsCursor - 2
+				}
+				for i := start; i < len(m.paths) && i < start+3; i++ {
+					p := m.paths[i]
+					cursor := " "
+					style := itemStyle
+					if m.pathsCursor == i {
+						cursor = ">"
+						style = selectedItemStyle
+					}
+					body.WriteString(style.Render(fmt.Sprintf("%s %s", cursor, p.Path)) + "\n")
+				}
+				body.WriteString("\n")
+			}
+
+			if m.isProcessing {
+				body.WriteString(processingStyle.Render("Processing backup... Please wait.") + "\n\n")
+			} else if m.message != "" {
+				style := errorStyle
+				if m.isSuccess {
+					style = successStyle
+				}
+				body.WriteString(style.Render(m.message) + "\n\n")
+			}
+
+			body.WriteString(headerStyle.Render("Recent Backups:") + "\n")
+			if len(m.history) == 0 {
+				body.WriteString("No history available.\n")
+			} else {
+				// Show up to 4 history items with scrolling
+				visibleHistory := 4
+				for i := m.historyOffset; i < len(m.history) && i < m.historyOffset+visibleHistory; i++ {
+					h := m.history[i]
+					status := "OK"
+					card := logSuccessCard
+					if h.Result != "success" {
+						status = "ERROR"
+						card = logErrorCard
+					}
+
+					timestamp := m.formatRelativeTime(h.Timestamp)
+					msg := fmt.Sprintf("%s • %s\n%s",
+						card.Render(status),
+						logTimeStyle.Render(timestamp),
+						itemStyle.Render(h.Path))
+
+					body.WriteString(msg + "\n")
+				}
+			}
+			body.WriteString(footerStyle.Render("\nenter: start • esc: back • ↑/↓: paths • pgup/pgdn: logs"))
+
+		case configureNasView:
+			body.WriteString(titleStyle.Render(" CONFIGURE NAS ") + "\n\n")
+			displayPath := m.nasPath
+			if displayPath == "" {
+				displayPath = "Not configured"
+			}
+			fmt.Fprintf(&body, "Current NAS Path: %s\n\n", displayPath)
+
+			if m.message != "" {
+				style := errorStyle
+				if m.isSuccess {
+					style = successStyle
+				}
+				body.WriteString(style.Render(m.message) + "\n\n")
+			}
+			body.WriteString(footerStyle.Render("e: edit • t: test • esc: back"))
+
+		case nasInputView:
+			body.WriteString(titleStyle.Render(" EDIT NAS PATH ") + "\n\n")
+			fmt.Fprintf(&body,
+				"Enter NAS share path:\n\n%s\n\n%s",
+				m.nasInput.View(),
+				footerStyle.Render("(esc to cancel • enter to save)"),
+			)
+		}
 	}
 
+	// Centering the container in the terminal
 	return lipgloss.Place(
 		m.width, m.height,
 		lipgloss.Center, lipgloss.Center,
@@ -365,24 +360,18 @@ func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.pathsCursor > 0 {
 			m.pathsCursor--
-			m.historyScroll = 0 // Reset scroll when changing paths
 		}
 	case "down", "j":
 		if m.pathsCursor < len(m.paths)-1 {
 			m.pathsCursor++
-			m.historyScroll = 0 // Reset scroll when changing paths
 		}
-	case "pgup", "shift+up":
-		// Scroll history up
-		if m.historyScroll > 0 {
-			m.historyScroll--
+	case "pgup": // Scroll history up
+		if m.historyOffset > 0 {
+			m.historyOffset--
 		}
-	case "pgdn", "shift+down":
-		// Scroll history down
-		maxScroll := len(m.history) - 5
-		maxScroll = max(maxScroll, 0)
-		if m.historyScroll < maxScroll {
-			m.historyScroll++
+	case "pgdown": // Scroll history down
+		if m.historyOffset < len(m.history)-4 {
+			m.historyOffset++
 		}
 	case "enter":
 		if len(m.paths) > 0 && !m.isProcessing {
@@ -397,7 +386,6 @@ func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.state = menuView
 		m.message = ""
-		m.historyScroll = 0 // Reset scroll when leaving view
 	}
 	return m, nil
 }

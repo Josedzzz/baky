@@ -41,12 +41,12 @@ type Model struct {
 	editingIndex  int // index of the path being edited (-1 for new)
 	nasPath       string
 	history       []config.BackupEvent
+	historyOffset int // for scrolling history
 	isProcessing  bool
 	message       string
 	isSuccess     bool
 	width         int
 	height        int
-	historyScroll int // scroll position for history
 }
 
 // NewModel init and returns a new Model with default values
