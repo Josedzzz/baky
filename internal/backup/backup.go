@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Josedzzz/baky/internal/config"
@@ -22,6 +23,12 @@ func RunBackup(sourcePath string) error {
 		return fmt.Errorf("NAS path not configured")
 	}
 
+	// Check if source path exists
+	if _, err := os.Stat(sourcePath); err != nil {
+		config.LogBackup(sourcePath, false, fmt.Sprintf("Source path error: %v", err))
+		return fmt.Errorf("source path error: %v", err)
+	}
+
 	// Create backup filename: [base_name]_[timestamp].tar.gz
 	base := filepath.Base(sourcePath)
 	timestamp := time.Now().Format("20060102_150405")
@@ -31,7 +38,11 @@ func RunBackup(sourcePath string) error {
 	err = createTarGz(sourcePath, destPath)
 
 	// Log the result
-	logErr := config.LogBackup(sourcePath, err == nil, "")
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	logErr := config.LogBackup(sourcePath, err == nil, msg)
 	if logErr != nil {
 		fmt.Printf("Error logging backup: %v\n", logErr)
 	}
@@ -52,17 +63,22 @@ func createTarGz(src, dest string) error {
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-	return filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		header, err := tar.FileInfoHeader(fi, fi.Name())
+		info, err := d.Info()
 		if err != nil {
 			return err
 		}
 
-		rel, err := filepath.Rel(filepath.Dir(src), file)
+		header, err := tar.FileInfoHeader(info, info.Name())
+		if err != nil {
+			return err
+		}
+
+		rel, err := filepath.Rel(filepath.Dir(src), path)
 		if err != nil {
 			return err
 		}
@@ -72,11 +88,12 @@ func createTarGz(src, dest string) error {
 			return err
 		}
 
-		if !fi.Mode().IsRegular() {
+		switch {
+		case !d.Type().IsRegular():
 			return nil
 		}
 
-		f, err := os.Open(file)
+		f, err := os.Open(path)
 		if err != nil {
 			return err
 		}
@@ -87,16 +104,25 @@ func createTarGz(src, dest string) error {
 	})
 }
 
+var (
+	watcher      *fsnotify.Watcher
+	watchedPaths sync.Map // map[string]struct{}
+)
+
 // StartWatcher initiates a goroutine to monitor path changes for "on_change" frequency
 func StartWatcher() error {
-	watcher, err := fsnotify.NewWatcher()
+	if watcher != nil {
+		watcher.Close()
+	}
+
+	var err error
+	watcher, err = fsnotify.NewWatcher()
 	if err != nil {
 		return err
 	}
 
 	go func() {
 		defer watcher.Close()
-
 		// debounce timers map
 		timers := make(map[string]*time.Timer)
 
@@ -131,11 +157,43 @@ func StartWatcher() error {
 		}
 	}()
 
-	// Add paths to watcher
-	paths, _ := config.GetPaths()
+	return UpdateWatcher()
+}
+
+// UpdateWatcher refreshes the list of watched paths based on current config
+func UpdateWatcher() error {
+	if watcher == nil {
+		return nil
+	}
+
+	paths, err := config.GetPaths()
+	if err != nil {
+		return err
+	}
+
+	// Paths that should be watched now
+	currentPathsToWatch := make(map[string]bool)
 	for _, p := range paths {
 		if p.Frequency == config.FreqOnChange {
-			addRecursive(watcher, p.Path)
+			currentPathsToWatch[p.Path] = true
+		}
+	}
+
+	// Remove paths that are no longer watched
+	watchedPaths.Range(func(key, value any) bool {
+		path := key.(string)
+		if !currentPathsToWatch[path] {
+			removeRecursive(watcher, path)
+			watchedPaths.Delete(path)
+		}
+		return true
+	})
+
+	// Add new paths to watch
+	for path := range currentPathsToWatch {
+		if _, ok := watchedPaths.Load(path); !ok {
+			addRecursive(watcher, path)
+			watchedPaths.Store(path, struct{}{})
 		}
 	}
 
@@ -143,12 +201,24 @@ func StartWatcher() error {
 }
 
 func addRecursive(w *fsnotify.Watcher, path string) {
-	filepath.Walk(path, func(p string, fi os.FileInfo, err error) error {
+	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
-		if fi.IsDir() {
+		if d.IsDir() {
 			w.Add(p)
+		}
+		return nil
+	})
+}
+
+func removeRecursive(w *fsnotify.Watcher, path string) {
+	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			w.Remove(p)
 		}
 		return nil
 	})

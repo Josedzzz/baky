@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -40,7 +41,37 @@ type Config struct {
 var (
 	configLock sync.RWMutex
 	currentCfg *Config
+	configPath string
 )
+
+func init() {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		configPath = "config.json"
+		return
+	}
+	
+	appDir := filepath.Join(configDir, "baky")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		configPath = "config.json"
+		return
+	}
+	
+	configPath = filepath.Join(appDir, "config.json")
+
+	// Migration: If a config exists in the current directory but not in the new location, move it.
+	if _, err := os.Stat("config.json"); err == nil {
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			// Try to move it to the new location
+			if data, err := os.ReadFile("config.json"); err == nil {
+				if err := os.WriteFile(configPath, data, 0o600); err == nil {
+					// Successfully migrated, optionally rename old one to avoid confusion
+					os.Rename("config.json", "config.json.bak")
+				}
+			}
+		}
+	}
+}
 
 // LoadConfig reads the config file into the currentCfg variable
 func LoadConfig() (*Config, error) {
@@ -54,7 +85,7 @@ func LoadConfig() (*Config, error) {
 	configLock.Lock()
 	defer configLock.Unlock()
 
-	data, err := os.ReadFile(ConfigFile)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			currentCfg = &Config{
@@ -68,9 +99,7 @@ func LoadConfig() (*Config, error) {
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		// If unmarshal fails, it might be an old format.
-		// Try to fix it or just reset it.
-		// Given the user wants a single config and mentioned errors, let's try to handle gracefully.
+		// If unmarshal fails, just reset it.
 		currentCfg = &Config{
 			BackupPaths: []BackupPathConfig{},
 			History:     []BackupEvent{},
@@ -98,7 +127,7 @@ func SaveConfig(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(ConfigFile, data, 0o644); err != nil {
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
 		return err
 	}
 	currentCfg = cfg
