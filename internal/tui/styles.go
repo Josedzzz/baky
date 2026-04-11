@@ -34,9 +34,16 @@ var (
 			PaddingLeft(2)
 
 	selectedItemStyle = lipgloss.NewStyle().
-				PaddingLeft(0).
-				Foreground(primaryColor).
-				Bold(true)
+				PaddingLeft(1).
+				Foreground(whiteColor).
+				Background(secondaryColor).
+				Bold(true).
+				Width(45)
+
+	statusStyle = lipgloss.NewStyle().
+			Foreground(grayColor).
+			MarginTop(1).
+			Italic(true)
 
 	headerStyle = lipgloss.NewStyle().
 			Foreground(primaryColor).
@@ -54,11 +61,7 @@ var (
 			MarginTop(1)
 
 	containerStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(primaryColor).
-			Padding(1).
-			Width(60).
-			Height(25)
+			Padding(1, 2)
 
 	successStyle = lipgloss.NewStyle().
 			Foreground(secondaryColor).

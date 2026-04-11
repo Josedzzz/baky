@@ -20,7 +20,7 @@ const logo = `
  ██████╔╝███████║█████╔╝  ╚████╔╝ 
  ██╔══██╗██╔══██║██╔═██╗   ╚██╔╝  
  ██████╔╝██║  ██║██║  ██╗   ██║   
- ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
+ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
 `
 
 const miniLogo = " BAKY"
@@ -75,14 +75,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case backupFilesView:
 			return m.handleBackupFilesUpdate(msg)
 		default:
-			return m.HandleMenuUpdate(msg)
+			return m.handleMenuUpdate(msg)
 		}
 	}
 	return m, nil
 }
 
-// HandleMenuUpdate processes key messages when the TUI is in the menu view
-func (m Model) HandleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
+// handleMenuUpdate processes key messages when the TUI is in the menu view
+func (m Model) handleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -143,11 +143,19 @@ func (m Model) View() string {
 
 		for i, choice := range m.choices {
 			if m.cursor == i {
-				fmt.Fprintf(&body, "%s\n", selectedItemStyle.Render("> "+choice))
+				fmt.Fprintf(&body, "%s\n", selectedItemStyle.Render(choice))
 			} else {
 				fmt.Fprintf(&body, "%s\n", itemStyle.Render(choice))
 			}
 		}
+
+		// Status Summary
+		nasStatus := "Not configured"
+		if m.nasPath != "" {
+			nasStatus = m.nasPath
+		}
+		summary := fmt.Sprintf("\nNAS: %s\nPaths: %d monitored", nasStatus, len(m.paths))
+		body.WriteString(statusStyle.Render(summary) + "\n")
 
 		if m.message != "" {
 			style := errorStyle
@@ -181,17 +189,29 @@ func (m Model) View() string {
 				body.WriteString("No paths added yet.\n\n")
 			} else {
 				for i, p := range m.paths {
-					cursor := " "
 					style := itemStyle
+					label := p.Path
 					if m.pathsCursor == i {
-						cursor = ">"
 						style = selectedItemStyle
 					}
 					last := "Never"
 					if !p.LastBackup.IsZero() {
 						last = p.LastBackup.Format("2006-01-02 15:04")
 					}
-					body.WriteString(style.Render(fmt.Sprintf("%s %-20s [%s] (Last: %s)", cursor, p.Path, p.Frequency, last)) + "\n")
+
+					var freqLabel string
+					switch p.Frequency {
+					case config.FreqWeekly:
+						freqLabel = "[W]"
+					case config.FreqOnChange:
+						freqLabel = "[C]"
+					default:
+						freqLabel = "[D]"
+					}
+
+					line := fmt.Sprintf("%-20s %s [%s] (Last: %s)", label, freqLabel, p.Frequency, last)
+
+					body.WriteString(style.Render(line) + "\n")
 				}
 				body.WriteString("\n")
 			}
@@ -217,13 +237,11 @@ func (m Model) View() string {
 				}
 				for i := start; i < len(m.paths) && i < start+3; i++ {
 					p := m.paths[i]
-					cursor := " "
 					style := itemStyle
 					if m.pathsCursor == i {
-						cursor = ">"
 						style = selectedItemStyle
 					}
-					body.WriteString(style.Render(fmt.Sprintf("%s %s", cursor, p.Path)) + "\n")
+					body.WriteString(style.Render(p.Path) + "\n")
 				}
 				body.WriteString("\n")
 			}
@@ -337,6 +355,7 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				p.Frequency = config.FreqDaily
 			}
 			config.SavePaths(m.paths)
+			backup.UpdateWatcher()
 		}
 	case "d":
 		if len(m.paths) > 0 {
@@ -345,6 +364,7 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pathsCursor--
 			}
 			config.SavePaths(m.paths)
+			backup.UpdateWatcher()
 			m.message = "Path deleted"
 			m.isSuccess = true
 		}
@@ -468,6 +488,7 @@ func (m Model) handleInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.message = "Path updated"
 			}
 			config.SavePaths(m.paths)
+			backup.UpdateWatcher()
 			m.isSuccess = true
 			m.state = managePathsView
 			m.pathInput.Reset()

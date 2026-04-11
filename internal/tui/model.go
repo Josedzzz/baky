@@ -57,11 +57,18 @@ func NewModel() Model {
 	ni := textinput.New()
 	ni.Placeholder = "/path/to/nas"
 
+	paths, _ := config.GetPaths()
+	nasPath, _ := config.GetNasPath()
+	history, _ := config.GetHistory()
+
 	return Model{
 		choices:      []string{"Manage Paths", "Backup Files", "Configure NAS", "Exit"},
 		pathInput:    ti,
 		nasInput:     ni,
 		state:        menuView,
 		editingIndex: -1,
+		paths:        paths,
+		nasPath:      nasPath,
+		history:      history,
 	}
 }
