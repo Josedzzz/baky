@@ -35,10 +35,10 @@ var (
 
 	selectedItemStyle = lipgloss.NewStyle().
 				PaddingLeft(1).
+				PaddingRight(1).
 				Foreground(whiteColor).
 				Background(secondaryColor).
-				Bold(true).
-				Width(45)
+				Bold(true)
 
 	statusStyle = lipgloss.NewStyle().
 			Foreground(grayColor).
