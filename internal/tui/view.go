@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -279,6 +280,13 @@ func (m Model) View() string {
 
 					body.WriteString(msg + "\n")
 				}
+
+				// Add scroll indicator
+				if len(m.history) > visibleHistory {
+					scrollPercentage := int((float64(m.historyOffset+visibleHistory) / float64(len(m.history))) * 100)
+					scrollIndicator := fmt.Sprintf("\n[Logs: %d/%d - %d%%]", m.historyOffset+1, len(m.history), scrollPercentage)
+					body.WriteString(statusStyle.Render(scrollIndicator) + "\n")
+				}
 			}
 			body.WriteString(footerStyle.Render("\nenter: start • esc: back • ↑/↓: paths • pgup/pgdn: logs"))
 
@@ -390,7 +398,8 @@ func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.historyOffset--
 		}
 	case "pgdown": // Scroll history down
-		if m.historyOffset < len(m.history)-4 {
+		maxOffset := int(math.Max(0, float64(len(m.history)-4)))
+		if m.historyOffset < maxOffset {
 			m.historyOffset++
 		}
 	case "enter":
