@@ -45,28 +45,40 @@ var (
 )
 
 func init() {
-	configDir, err := os.UserConfigDir()
+	// Use ~/.config/baky for all platforms (Linux standard)
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		configPath = "config.json"
 		return
 	}
-	
-	appDir := filepath.Join(configDir, "baky")
+
+	appDir := filepath.Join(homeDir, ".config", "baky")
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		configPath = "config.json"
 		return
 	}
-	
+
 	configPath = filepath.Join(appDir, "config.json")
 
-	// Migration: If a config exists in the current directory but not in the new location, move it.
+	// Migration: Check for config in old locations and migrate if needed
+	// 1. Check for config in current directory
 	if _, err := os.Stat("config.json"); err == nil {
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
-			// Try to move it to the new location
 			if data, err := os.ReadFile("config.json"); err == nil {
 				if err := os.WriteFile(configPath, data, 0o600); err == nil {
-					// Successfully migrated, optionally rename old one to avoid confusion
 					os.Rename("config.json", "config.json.bak")
+				}
+			}
+		}
+	}
+
+	// 2. Check for config in macOS Library/Application Support location
+	macosLegacyPath := filepath.Join(homeDir, "Library", "Application Support", "baky", "config.json")
+	if _, err := os.Stat(macosLegacyPath); err == nil {
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			if data, err := os.ReadFile(macosLegacyPath); err == nil {
+				if err := os.WriteFile(configPath, data, 0o600); err == nil {
+					os.Rename(macosLegacyPath, macosLegacyPath+".bak")
 				}
 			}
 		}
@@ -106,14 +118,14 @@ func LoadConfig() (*Config, error) {
 		}
 		return currentCfg, nil
 	}
-	
+
 	if cfg.BackupPaths == nil {
 		cfg.BackupPaths = []BackupPathConfig{}
 	}
 	if cfg.History == nil {
 		cfg.History = []BackupEvent{}
 	}
-	
+
 	currentCfg = &cfg
 	return currentCfg, nil
 }
@@ -191,25 +203,25 @@ func LogBackup(path string, success bool, message string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	result := "success"
 	if !success {
 		result = "error"
 	}
-	
+
 	event := BackupEvent{
 		Path:      path,
 		Timestamp: time.Now(),
 		Result:    result,
 		Message:   message,
 	}
-	
+
 	// Prepend to history
 	cfg.History = append([]BackupEvent{event}, cfg.History...)
 	if len(cfg.History) > 100 { // Keep last 100 events
 		cfg.History = cfg.History[:100]
 	}
-	
+
 	// Update last_backup in config
 	if success {
 		for i, p := range cfg.BackupPaths {
@@ -219,7 +231,7 @@ func LogBackup(path string, success bool, message string) error {
 			}
 		}
 	}
-	
+
 	return SaveConfig(cfg)
 }
 
