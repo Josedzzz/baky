@@ -273,7 +273,7 @@ func (m Model) View() string {
 					}
 
 					timestamp := m.formatRelativeTime(h.Timestamp)
-					msg := fmt.Sprintf("%s • %s\n%s",
+					msg := fmt.Sprintf("%s - %s %s",
 						card.Render(status),
 						logTimeStyle.Render(timestamp),
 						itemStyle.Render(h.Path))

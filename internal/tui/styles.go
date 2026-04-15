@@ -48,7 +48,6 @@ var (
 	headerStyle = lipgloss.NewStyle().
 			Foreground(primaryColor).
 			Bold(true).
-			MarginTop(1).
 			MarginBottom(1)
 
 	processingStyle = lipgloss.NewStyle().
@@ -70,13 +69,11 @@ var (
 
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF0000")).
-			Bold(true).
-			MarginTop(1)
+			Bold(true)
 
 	// Log Card Styles
 	logCardStyle = lipgloss.NewStyle().
 			Padding(0, 1).
-			MarginBottom(1).
 			Border(lipgloss.NormalBorder(), false, false, false, true)
 
 	logSuccessCard = logCardStyle.
