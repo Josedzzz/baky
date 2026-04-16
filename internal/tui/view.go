@@ -69,10 +69,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleInputUpdate(msg)
 		case managePathsView:
 			return m.handleManagePathsUpdate(msg)
-		case configureNasView:
-			return m.handleConfigureNasUpdate(msg)
-		case nasInputView:
-			return m.handleNasInputUpdate(msg)
+		case configureBackupDestView:
+			return m.handleConfigureBackupDestUpdate(msg)
+		case backupDestInputView:
+			return m.handleBackupDestInputUpdate(msg)
 		case backupFilesView:
 			return m.handleBackupFilesUpdate(msg)
 		default:
@@ -113,10 +113,10 @@ func (m Model) handleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pathsCursor = 0
 				m.historyOffset = 0
 				m.message = ""
-			case "Configure NAS":
-				nasPath, _ := config.GetNasPath()
-				m.nasPath = nasPath
-				m.state = configureNasView
+			case "Backup Destination":
+				backupDest, _ := config.GetNasPath()
+				m.backupDest = backupDest
+				m.state = configureBackupDestView
 				m.message = ""
 			case "Exit":
 				m.quitting = true
@@ -151,11 +151,11 @@ func (m Model) View() string {
 		}
 
 		// Status Summary
-		nasStatus := "Not configured"
-		if m.nasPath != "" {
-			nasStatus = m.nasPath
+		destStatus := "Not configured"
+		if m.backupDest != "" {
+			destStatus = m.backupDest
 		}
-		summary := fmt.Sprintf("\nNAS: %s\nPaths: %d monitored", nasStatus, len(m.paths))
+		summary := fmt.Sprintf("\nBackup Destination: %s\nPaths: %d monitored", destStatus, len(m.paths))
 		body.WriteString(statusStyle.Render(summary) + "\n")
 
 		if m.message != "" {
@@ -290,13 +290,13 @@ func (m Model) View() string {
 			}
 			body.WriteString(footerStyle.Render("\nenter: start • esc: back • ↑/↓: paths • pgup/pgdn: logs"))
 
-		case configureNasView:
-			body.WriteString(titleStyle.Render(" CONFIGURE NAS ") + "\n\n")
-			displayPath := m.nasPath
+		case configureBackupDestView:
+			body.WriteString(titleStyle.Render(" BACKUP DESTINATION ") + "\n\n")
+			displayPath := m.backupDest
 			if displayPath == "" {
 				displayPath = "Not configured"
 			}
-			fmt.Fprintf(&body, "Current NAS Path: %s\n\n", displayPath)
+			fmt.Fprintf(&body, "Backup Destination: %s\n\n", displayPath)
 
 			if m.message != "" {
 				style := errorStyle
@@ -307,11 +307,11 @@ func (m Model) View() string {
 			}
 			body.WriteString(footerStyle.Render("e: edit • t: test • esc: back"))
 
-		case nasInputView:
-			body.WriteString(titleStyle.Render(" EDIT NAS PATH ") + "\n\n")
+		case backupDestInputView:
+			body.WriteString(titleStyle.Render(" EDIT BACKUP DESTINATION ") + "\n\n")
 			fmt.Fprintf(&body,
-				"Enter NAS share path:\n\n%s\n\n%s",
-				m.nasInput.View(),
+				"Enter backup destination path:\n\n%s\n\n%s",
+				m.backupDestInput.View(),
 				footerStyle.Render("(esc to cancel • enter to save)"),
 			)
 		}
@@ -419,21 +419,21 @@ func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleConfigureNasUpdate handles key messages in the NAS config view
-func (m Model) handleConfigureNasUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// handleConfigureBackupDestUpdate handles key messages in the backup destination config view
+func (m Model) handleConfigureBackupDestUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "e":
-		m.state = nasInputView
-		m.nasInput.SetValue(m.nasPath)
-		m.nasInput.Focus()
+		m.state = backupDestInputView
+		m.backupDestInput.SetValue(m.backupDest)
+		m.backupDestInput.Focus()
 		m.message = ""
 	case "t":
-		if m.nasPath == "" {
-			m.message = "NAS path not configured"
+		if m.backupDest == "" {
+			m.message = "Backup destination not configured"
 			m.isSuccess = false
 			return m, nil
 		}
-		info, err := os.Stat(m.nasPath)
+		info, err := os.Stat(m.backupDest)
 		if err != nil {
 			m.message = "Error: " + err.Error()
 			m.isSuccess = false
@@ -441,7 +441,7 @@ func (m Model) handleConfigureNasUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = "Path is not a directory"
 			m.isSuccess = false
 		} else {
-			m.message = "NAS path is accessible!"
+			m.message = "Backup destination is accessible!"
 			m.isSuccess = true
 		}
 	case "esc":
@@ -451,29 +451,29 @@ func (m Model) handleConfigureNasUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleNasInputUpdate handles NAS path input
-func (m Model) handleNasInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// handleBackupDestInputUpdate handles backup destination path input
+func (m Model) handleBackupDestInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg.String() {
 	case "esc":
-		m.state = configureNasView
+		m.state = configureBackupDestView
 		return m, nil
 	case "enter":
-		val := m.nasInput.Value()
+		val := m.backupDestInput.Value()
 		if val != "" {
 			if err := config.SaveNasPath(val); err != nil {
-				m.message = "Error saving NAS path"
+				m.message = "Error saving backup destination"
 				m.isSuccess = false
 			} else {
-				m.nasPath = val
-				m.message = "NAS path updated"
+				m.backupDest = val
+				m.message = "Backup destination updated"
 				m.isSuccess = true
 			}
-			m.state = configureNasView
+			m.state = configureBackupDestView
 		}
 		return m, nil
 	}
-	m.nasInput, cmd = m.nasInput.Update(msg)
+	m.backupDestInput, cmd = m.backupDestInput.Update(msg)
 	return m, cmd
 }
 
