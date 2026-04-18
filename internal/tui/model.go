@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/Josedzzz/baky/internal/config"
+	"github.com/Josedzzz/baky/internal/restore"
 	"github.com/charmbracelet/bubbles/textinput"
 )
 
@@ -26,6 +27,9 @@ const (
 
 	// backupDestInputView is a sub-state for when the user is typing a backup destination path
 	backupDestInputView
+
+	// viewBackupsView is the state where the user views available backups
+	viewBackupsView
 )
 
 // Model represents the state of the TUI
@@ -47,6 +51,10 @@ type Model struct {
 	isSuccess       bool
 	width           int
 	height          int
+	// Backup viewing fields
+	allBackups    []restore.BackupInfo // All scanned backups
+	backupsCursor int                  // cursor for backup list
+	backupsOffset int                  // for scrolling backup list
 }
 
 // NewModel init and returns a new Model with default values
@@ -62,7 +70,7 @@ func NewModel() Model {
 	history, _ := config.GetHistory()
 
 	return Model{
-		choices:         []string{"Manage Paths", "Backup Files", "Backup Destination", "Exit"},
+		choices:         []string{"Manage Paths", "Backup Files", "View Backups", "Backup Destination", "Exit"},
 		pathInput:       ti,
 		backupDestInput: di,
 		state:           menuView,
@@ -70,5 +78,6 @@ func NewModel() Model {
 		paths:           paths,
 		backupDest:      backupDest,
 		history:         history,
+		allBackups:      []restore.BackupInfo{},
 	}
 }

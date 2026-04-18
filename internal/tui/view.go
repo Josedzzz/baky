@@ -10,6 +10,7 @@ import (
 
 	"github.com/Josedzzz/baky/internal/backup"
 	"github.com/Josedzzz/baky/internal/config"
+	"github.com/Josedzzz/baky/internal/restore"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -75,6 +76,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleBackupDestInputUpdate(msg)
 		case backupFilesView:
 			return m.handleBackupFilesUpdate(msg)
+		case viewBackupsView:
+			return m.handleViewBackupsUpdate(msg)
 		default:
 			return m.handleMenuUpdate(msg)
 		}
@@ -113,6 +116,27 @@ func (m Model) handleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pathsCursor = 0
 				m.historyOffset = 0
 				m.message = ""
+			case "View Backups":
+				// Load backups from NAS
+				nasPath, _ := config.GetNasPath()
+				if nasPath != "" {
+					if backups, err := restore.GetAllBackups(nasPath); err == nil {
+						m.allBackups = backups
+						m.message = fmt.Sprintf("Found %d backups", len(backups))
+						m.isSuccess = true
+					} else {
+						m.message = "Error loading backups: " + err.Error()
+						m.isSuccess = false
+						m.allBackups = []restore.BackupInfo{}
+					}
+				} else {
+					m.message = "Backup destination not configured"
+					m.isSuccess = false
+					m.allBackups = []restore.BackupInfo{}
+				}
+				m.state = viewBackupsView
+				m.backupsCursor = 0
+				m.backupsOffset = 0
 			case "Backup Destination":
 				backupDest, _ := config.GetNasPath()
 				m.backupDest = backupDest
@@ -314,6 +338,56 @@ func (m Model) View() string {
 				m.backupDestInput.View(),
 				footerStyle.Render("(esc to cancel • enter to save)"),
 			)
+
+		case viewBackupsView:
+			body.WriteString(titleStyle.Render(" VIEW BACKUPS ") + "\n\n")
+			if len(m.allBackups) == 0 {
+				body.WriteString("No backups found.\n\n")
+			} else {
+				body.WriteString(headerStyle.Render("Available Backups:") + "\n")
+				// Show up to 6 backups at a time
+				visibleBackups := 6
+				for i := m.backupsOffset; i < len(m.allBackups) && i < m.backupsOffset+visibleBackups; i++ {
+					b := m.allBackups[i]
+					style := itemStyle
+					if m.backupsCursor-m.backupsOffset == i-m.backupsOffset {
+						style = selectedItemStyle
+					}
+
+					// Format the backup info
+					status := "✓"
+					if b.Result != "success" {
+						status = "✗"
+					}
+					sizeStr := restore.FormatFileSize(b.FileSize)
+					timeStr := b.Timestamp.Format("2006-01-02 15:04:05")
+					line := fmt.Sprintf("%s %s | %s | %s | %s",
+						status,
+						timeStr,
+						sizeStr,
+						b.SourcePath,
+						b.Filename)
+
+					body.WriteString(style.Render(line) + "\n")
+				}
+
+				// Add scroll indicator
+				if len(m.allBackups) > visibleBackups {
+					scrollPercentage := int((float64(m.backupsOffset+visibleBackups) / float64(len(m.allBackups))) * 100)
+					scrollIndicator := fmt.Sprintf("\n[Backups: %d/%d - %d%%]", m.backupsOffset+1, len(m.allBackups), scrollPercentage)
+					body.WriteString(statusStyle.Render(scrollIndicator) + "\n")
+				}
+			}
+
+			if m.message != "" {
+				style := errorStyle
+				if m.isSuccess {
+					style = successStyle
+				}
+				body.WriteString(style.Render(m.message) + "\n")
+			}
+
+			body.WriteString(footerStyle.Render("\nesc: back • ↑/↓: scroll • pgup/pgdn: scroll more"))
 		}
 	}
 
@@ -524,4 +598,49 @@ func (m Model) formatRelativeTime(t time.Time) string {
 	default:
 		return t.Format("Jan 02 15:04")
 	}
+}
+
+// handleViewBackupsUpdate handles key messages in the view backups
+func (m Model) handleViewBackupsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.backupsCursor > 0 {
+			m.backupsCursor--
+			// Adjust offset if needed
+			if m.backupsCursor < m.backupsOffset {
+				m.backupsOffset = m.backupsCursor
+			}
+		}
+	case "down", "j":
+		if m.backupsCursor < len(m.allBackups)-1 {
+			m.backupsCursor++
+			// Adjust offset if needed
+			visibleBackups := 6
+			if m.backupsCursor >= m.backupsOffset+visibleBackups {
+				m.backupsOffset = m.backupsCursor - visibleBackups + 1
+			}
+		}
+	case "pgup":
+		// Scroll up
+		if m.backupsOffset > 0 {
+			m.backupsOffset--
+			if m.backupsCursor > m.backupsOffset+6 {
+				m.backupsCursor = m.backupsOffset + 6
+			}
+		}
+	case "pgdown":
+		visibleBackups := 6
+		maxOffset := int(math.Max(float64(len(m.allBackups)-visibleBackups), 0))
+		if m.backupsOffset < maxOffset {
+			m.backupsOffset++
+			if m.backupsCursor < m.backupsOffset {
+				m.backupsCursor = m.backupsOffset
+			}
+		}
+	case "esc":
+		m.state = menuView
+		m.message = ""
+		m.allBackups = []restore.BackupInfo{}
+	}
+	return m, nil
 }
