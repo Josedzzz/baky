@@ -90,7 +90,7 @@ func NewModel() Model {
 	history, _ := config.GetHistory()
 
 	return Model{
-		choices:         []string{"Manage Paths", "Backup Files", "View Backups", "Configure Backup Destination", "Exit"},
+		choices:         []string{"Manage Paths", "Backup Files", "View Backups", "Backup Destination", "Exit"},
 		pathInput:       ti,
 		backupDestInput: di,
 		restoreInput:    ri,
