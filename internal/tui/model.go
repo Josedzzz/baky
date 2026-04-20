@@ -30,6 +30,15 @@ const (
 
 	// viewBackupsView is the state where the user views available backups
 	viewBackupsView
+
+	// selectRestoreDestView is the state where the user selects restore destination
+	selectRestoreDestView
+
+	// selectRestoreActionView is the state where the user selects action for conflicts
+	selectRestoreActionView
+
+	// restoreInputView is a sub-state for when the user is typing a restore path
+	restoreInputView
 )
 
 // Model represents the state of the TUI
@@ -55,6 +64,14 @@ type Model struct {
 	allBackups    []restore.BackupInfo // All scanned backups
 	backupsCursor int                  // cursor for backup list
 	backupsOffset int                  // for scrolling backup list
+
+	// Restore operation fields
+	selectedBackup     *restore.BackupInfo // Currently selected backup for restore
+	restoreInput       textinput.Model     // Input for restore path
+	restorePath        string              // User-specified restore path
+	restoreAction      restore.RestoreAction
+	restoreActionIndex int // For selecting action (overwrite/rename/skip)
+	isRestoring        bool
 }
 
 // NewModel init and returns a new Model with default values
@@ -65,14 +82,18 @@ func NewModel() Model {
 	di := textinput.New()
 	di.Placeholder = "/path/to/backup/destination"
 
+	ri := textinput.New()
+	ri.Placeholder = "/path/to/restore/to"
+
 	paths, _ := config.GetPaths()
 	backupDest, _ := config.GetNasPath()
 	history, _ := config.GetHistory()
 
 	return Model{
-		choices:         []string{"Manage Paths", "Backup Files", "View Backups", "Backup Destination", "Exit"},
+		choices:         []string{"Manage Paths", "Backup Files", "View Backups", "Configure Backup Destination", "Exit"},
 		pathInput:       ti,
 		backupDestInput: di,
+		restoreInput:    ri,
 		state:           menuView,
 		editingIndex:    -1,
 		paths:           paths,

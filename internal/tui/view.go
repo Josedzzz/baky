@@ -32,6 +32,11 @@ type backupFinishedMsg struct {
 	path string
 }
 
+type restoreFinishedMsg struct {
+	result *restore.RestoreResult
+	err    error
+}
+
 // Init initializes the TUI model and returns the initial command
 func (m Model) Init() tea.Cmd {
 	return textinput.Blink
@@ -61,6 +66,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case restoreFinishedMsg:
+		m.isRestoring = false
+		if msg.err != nil {
+			m.message = "Restore failed: " + msg.err.Error()
+			m.isSuccess = false
+		} else if msg.result != nil {
+			if msg.result.Success {
+				m.message = fmt.Sprintf("Restore successful! Files restored to %s", msg.result.DestinationPath)
+				m.isSuccess = true
+				// Log restore event
+				actionStr := "overwrite"
+				switch msg.result.Action {
+				case restore.RestoreActionRename:
+					actionStr = "rename"
+				case restore.RestoreActionSkip:
+					actionStr = "skip"
+				}
+				config.LogRestore(
+					m.selectedBackup.Filename,
+					m.selectedBackup.SourcePath,
+					msg.result.DestinationPath,
+					actionStr,
+					true,
+					msg.result.Message,
+				)
+			} else {
+				m.message = "Restore incomplete: " + msg.result.Message
+				m.isSuccess = false
+			}
+		}
+		m.state = viewBackupsView
+		m.selectedBackup = nil
+		return m, nil
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -78,6 +117,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleBackupFilesUpdate(msg)
 		case viewBackupsView:
 			return m.handleViewBackupsUpdate(msg)
+		case selectRestoreDestView:
+			return m.handleSelectRestoreDestUpdate(msg)
+		case selectRestoreActionView:
+			return m.handleSelectRestoreActionUpdate(msg)
+		case restoreInputView:
+			return m.handleRestoreInputUpdate(msg)
 		default:
 			return m.handleMenuUpdate(msg)
 		}
@@ -117,10 +162,16 @@ func (m Model) handleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.historyOffset = 0
 				m.message = ""
 			case "View Backups":
-				// Load backups from NAS
+				// Load backups from NAS with full paths from config
 				nasPath, _ := config.GetNasPath()
 				if nasPath != "" {
-					if backups, err := restore.GetAllBackups(nasPath); err == nil {
+					// Convert BackupPathConfig to ConfigPath for GetAllBackupsEnhanced
+					paths, _ := config.GetPaths()
+					configPaths := make([]restore.ConfigPath, len(paths))
+					for i, p := range paths {
+						configPaths[i] = restore.ConfigPath{Path: p.Path}
+					}
+					if backups, err := restore.GetAllBackupsEnhanced(nasPath, configPaths); err == nil {
 						m.allBackups = backups
 						m.message = fmt.Sprintf("Found %d backups", len(backups))
 						m.isSuccess = true
@@ -387,7 +438,66 @@ func (m Model) View() string {
 				body.WriteString(style.Render(m.message) + "\n")
 			}
 
-			body.WriteString(footerStyle.Render("\nesc: back • ↑/↓: scroll • pgup/pgdn: scroll more"))
+			body.WriteString(footerStyle.Render("\nenter: restore • esc: back • ↑/↓: scroll • pgup/pgdn: scroll more"))
+
+		case selectRestoreDestView:
+			body.WriteString(titleStyle.Render(" SELECT RESTORE DESTINATION ") + "\n\n")
+			body.WriteString(headerStyle.Render("Backup: ") + itemStyle.Render(m.selectedBackup.Filename) + "\n")
+			body.WriteString(headerStyle.Render("Source: ") + itemStyle.Render(m.selectedBackup.SourcePath) + "\n\n")
+
+			body.WriteString(headerStyle.Render("Where do you want to restore?") + "\n\n")
+			body.WriteString("o - Original location: " + m.selectedBackup.SourcePath + "\n")
+			body.WriteString("c - Choose custom path\n\n")
+
+			if m.message != "" {
+				style := errorStyle
+				if m.isSuccess {
+					style = successStyle
+				}
+				body.WriteString(style.Render(m.message) + "\n")
+			}
+
+			body.WriteString(footerStyle.Render("o: original • c: custom • esc: back"))
+
+		case restoreInputView:
+			body.WriteString(titleStyle.Render(" ENTER RESTORE PATH ") + "\n\n")
+			fmt.Fprintf(&body,
+				"Enter restore destination path:\n\n%s\n\n%s",
+				m.restoreInput.View(),
+				footerStyle.Render("(esc to cancel • enter to confirm)"),
+			)
+
+		case selectRestoreActionView:
+			body.WriteString(titleStyle.Render(" CONFLICT RESOLUTION ") + "\n\n")
+			body.WriteString(headerStyle.Render("Restore to: ") + itemStyle.Render(m.restorePath) + "\n\n")
+			body.WriteString(headerStyle.Render("Files exist at destination. What should we do?") + "\n\n")
+
+			actions := []string{
+				"✓ Overwrite - Replace existing files",
+				"↻ Rename    - Rename existing files with timestamp",
+				"✗ Skip      - Don't restore",
+			}
+
+			for i, action := range actions {
+				style := itemStyle
+				if m.restoreActionIndex == i {
+					style = selectedItemStyle
+				}
+				body.WriteString(style.Render(action) + "\n")
+			}
+
+			body.WriteString("\n")
+			if m.isRestoring {
+				body.WriteString(processingStyle.Render("Restoring... Please wait.") + "\n")
+			} else if m.message != "" {
+				style := errorStyle
+				if m.isSuccess {
+					style = successStyle
+				}
+				body.WriteString(style.Render(m.message) + "\n")
+			}
+
+			body.WriteString(footerStyle.Render("\n↑/↓: select • enter: confirm • esc: back"))
 		}
 	}
 
@@ -637,10 +747,106 @@ func (m Model) handleViewBackupsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.backupsCursor = m.backupsOffset
 			}
 		}
+	case "enter":
+		// Select backup for restore
+		if len(m.allBackups) > 0 && m.backupsCursor < len(m.allBackups) {
+			selectedBackup := m.allBackups[m.backupsCursor]
+			m.selectedBackup = &selectedBackup
+			m.state = selectRestoreDestView
+			m.restoreActionIndex = 0
+			m.message = ""
+		}
 	case "esc":
 		m.state = menuView
 		m.message = ""
 		m.allBackups = []restore.BackupInfo{}
 	}
 	return m, nil
+}
+
+// handleSelectRestoreDestUpdate handles destination selection (original or custom)
+func (m Model) handleSelectRestoreDestUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "o":
+		// Use original source path
+		m.restorePath = m.selectedBackup.SourcePath
+		m.state = selectRestoreActionView
+		m.restoreActionIndex = 0
+		m.message = ""
+	case "c":
+		// Choose custom path
+		m.state = restoreInputView
+		m.restoreInput.Reset()
+		m.restoreInput.Focus()
+		m.message = ""
+	case "esc":
+		m.state = viewBackupsView
+		m.selectedBackup = nil
+		m.message = ""
+	}
+	return m, nil
+}
+
+// handleSelectRestoreActionUpdate handles conflict resolution action selection
+func (m Model) handleSelectRestoreActionUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.restoreActionIndex > 0 {
+			m.restoreActionIndex--
+		}
+	case "down", "j":
+		if m.restoreActionIndex < 2 {
+			m.restoreActionIndex++
+		}
+	case "enter":
+		// Perform the restore
+		m.isRestoring = true
+		m.message = "Restoring... Please wait."
+
+		actions := []restore.RestoreAction{
+			restore.RestoreActionOverwrite,
+			restore.RestoreActionRename,
+			restore.RestoreActionSkip,
+		}
+		m.restoreAction = actions[m.restoreActionIndex]
+
+		// Execute restore in background
+		return m, func() tea.Msg {
+			result, err := restore.Restore(m.selectedBackup.FullPath, m.restorePath, m.restoreAction)
+			return restoreFinishedMsg{result: result, err: err}
+		}
+	case "esc":
+		m.state = selectRestoreDestView
+		m.message = ""
+	}
+	return m, nil
+}
+
+// handleRestoreInputUpdate handles custom restore path input
+func (m Model) handleRestoreInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch msg.String() {
+	case "esc":
+		m.state = selectRestoreDestView
+		m.restoreInput.Reset()
+		return m, nil
+	case "enter":
+		path := m.restoreInput.Value()
+		if path != "" {
+			// Validate path
+			if err := restore.ValidateRestorePath(path); err != nil {
+				m.message = "Invalid path: " + err.Error()
+				m.isSuccess = false
+				return m, nil
+			}
+			m.restorePath = path
+			m.state = selectRestoreActionView
+			m.restoreActionIndex = 0
+			m.restoreInput.Reset()
+			m.message = ""
+		}
+		return m, nil
+	}
+	m.restoreInput, cmd = m.restoreInput.Update(msg)
+	return m, cmd
 }
