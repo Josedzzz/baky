@@ -20,3 +20,8 @@ type BackupList struct {
 	Backups    []BackupInfo `json:"backups"`
 	Count      int          `json:"count"`
 }
+
+// ConfigPath represents a backup path from the config
+type ConfigPath struct {
+	Path string
+}

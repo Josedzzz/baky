@@ -99,6 +99,31 @@ func GetAllBackups(nasPath string) ([]BackupInfo, error) {
 	return allBackups, nil
 }
 
+// GetAllBackupsEnhanced returns a flat list of all backups with full source paths from config
+func GetAllBackupsEnhanced(nasPath string, configPaths []ConfigPath) ([]BackupInfo, error) {
+	backups, err := GetAllBackups(nasPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a map of basename to full paths from config
+	pathMap := make(map[string]string)
+	for _, configPath := range configPaths {
+		basename := filepath.Base(configPath.Path)
+		pathMap[basename] = configPath.Path
+	}
+
+	// Enhance backups with full paths from config
+	for i := range backups {
+		basename := backups[i].SourcePath
+		if fullPath, exists := pathMap[basename]; exists {
+			backups[i].SourcePath = fullPath
+		}
+	}
+
+	return backups, nil
+}
+
 // GetBackupsForSource returns all backups for a specific source path
 func GetBackupsForSource(nasPath, sourcePath string) (*BackupList, error) {
 	backupsBySource, err := ScanBackups(nasPath)
