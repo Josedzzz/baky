@@ -31,11 +31,23 @@ type BackupEvent struct {
 	Message   string    `json:"message,omitempty"`
 }
 
+// RestoreEvent represents a single restore operation event
+type RestoreEvent struct {
+	BackupFilename string    `json:"backup_filename"`   // The backup file restored
+	SourcePath     string    `json:"source_path"`       // Original source path
+	RestorePath    string    `json:"restore_path"`      // Where it was restored to
+	Timestamp      time.Time `json:"timestamp"`         // When restore was performed
+	Result         string    `json:"result"`            // "success", "error"
+	Message        string    `json:"message,omitempty"` // Optional info/error message
+	Action         string    `json:"action,omitempty"`  // "overwrite", "rename", "skip"
+}
+
 // Config represents the unified application configuration
 type Config struct {
-	NasPath     string             `json:"nas_path"`
-	BackupPaths []BackupPathConfig `json:"backup_paths"`
-	History     []BackupEvent      `json:"history"`
+	NasPath        string             `json:"nas_path"`
+	BackupPaths    []BackupPathConfig `json:"backup_paths"`
+	History        []BackupEvent      `json:"history"`
+	RestoreHistory []RestoreEvent     `json:"restore_history"`
 }
 
 var (
@@ -101,8 +113,9 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			currentCfg = &Config{
-				BackupPaths: []BackupPathConfig{},
-				History:     []BackupEvent{},
+				BackupPaths:    []BackupPathConfig{},
+				History:        []BackupEvent{},
+				RestoreHistory: []RestoreEvent{},
 			}
 			return currentCfg, nil
 		}
@@ -113,8 +126,9 @@ func LoadConfig() (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		// If unmarshal fails, just reset it.
 		currentCfg = &Config{
-			BackupPaths: []BackupPathConfig{},
-			History:     []BackupEvent{},
+			BackupPaths:    []BackupPathConfig{},
+			History:        []BackupEvent{},
+			RestoreHistory: []RestoreEvent{},
 		}
 		return currentCfg, nil
 	}
@@ -124,6 +138,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if cfg.History == nil {
 		cfg.History = []BackupEvent{}
+	}
+	if cfg.RestoreHistory == nil {
+		cfg.RestoreHistory = []RestoreEvent{}
 	}
 
 	currentCfg = &cfg
@@ -242,4 +259,44 @@ func GetHistory() ([]BackupEvent, error) {
 		return nil, err
 	}
 	return cfg.History, nil
+}
+
+// LogRestore adds a new restore event to the restore history
+func LogRestore(backupFilename, sourcePath, restorePath, action string, success bool, message string) error {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+
+	result := "success"
+	if !success {
+		result = "error"
+	}
+
+	event := RestoreEvent{
+		BackupFilename: backupFilename,
+		SourcePath:     sourcePath,
+		RestorePath:    restorePath,
+		Timestamp:      time.Now(),
+		Result:         result,
+		Message:        message,
+		Action:         action,
+	}
+
+	// Prepend to restore history
+	cfg.RestoreHistory = append([]RestoreEvent{event}, cfg.RestoreHistory...)
+	if len(cfg.RestoreHistory) > 100 { // Keep last 100 events
+		cfg.RestoreHistory = cfg.RestoreHistory[:100]
+	}
+
+	return SaveConfig(cfg)
+}
+
+// GetRestoreHistory returns the restore history
+func GetRestoreHistory() ([]RestoreEvent, error) {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	return cfg.RestoreHistory, nil
 }
