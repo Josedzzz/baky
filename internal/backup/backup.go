@@ -41,6 +41,10 @@ func RunBackup(sourcePath string) error {
 	msg := ""
 	if err != nil {
 		msg = err.Error()
+		// Clean up incomplete backup file on failure
+		if rmErr := os.Remove(destPath); rmErr != nil {
+			fmt.Printf("Warning: Could not clean up failed backup: %v\n", rmErr)
+		}
 	}
 	logErr := config.LogBackup(sourcePath, err == nil, msg)
 	if logErr != nil {
@@ -78,7 +82,7 @@ func createTarGz(src, dest string) error {
 			return err
 		}
 
-		rel, err := filepath.Rel(filepath.Dir(src), path)
+		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
 		}
@@ -134,7 +138,12 @@ func StartWatcher() error {
 				}
 				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
 					// Find which backup path this event belongs to
-					paths, _ := config.GetPaths()
+					// Take snapshot of paths to avoid race condition with config updates
+					paths, pathErr := config.GetPaths()
+					if pathErr != nil {
+						fmt.Printf("Error getting paths: %v\n", pathErr)
+						continue
+					}
 					for _, p := range paths {
 						if p.Frequency == config.FreqOnChange && strings.HasPrefix(event.Name, p.Path) {
 							// Debounce 5 seconds
@@ -228,24 +237,33 @@ func removeRecursive(w *fsnotify.Watcher, path string) {
 func StartScheduler() {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		lastDailyRun := time.Time{}
+		lastWeeklyRun := time.Time{}
+		
 		for range ticker.C {
 			now := time.Now()
-			paths, _ := config.GetPaths()
+			paths, pathErr := config.GetPaths()
+			if pathErr != nil {
+				fmt.Printf("Error getting paths for scheduler: %v\n", pathErr)
+				continue
+			}
 
 			for _, p := range paths {
 				switch p.Frequency {
 				case config.FreqDaily:
-					// Daily backup logic
-					if now.Hour() == 3 && now.Minute() == 0 && p.LastBackup.Format("2006-01-02") != now.Format("2006-01-02") {
+					// Daily backup logic: run once per day at 3 AM
+					if now.Hour() == 3 && now.Sub(lastDailyRun) > 24*time.Hour {
 						fmt.Printf("Daily backup triggered for: %s\n", p.Path)
 						RunBackup(p.Path)
+						lastDailyRun = now
 					}
 				case config.FreqWeekly:
-					// Weekly backup logic
-					if now.Weekday() == time.Sunday && now.Hour() == 3 && now.Minute() == 0 &&
-						now.Sub(p.LastBackup).Hours() > 24*6 {
+					// Weekly backup logic: run once per week on Sunday at 3 AM
+					if now.Weekday() == time.Sunday && now.Hour() == 3 && now.Sub(lastWeeklyRun) > 24*7*time.Hour {
 						fmt.Printf("Weekly backup triggered for: %s\n", p.Path)
 						RunBackup(p.Path)
+						lastWeeklyRun = now
 					}
 				}
 			}
