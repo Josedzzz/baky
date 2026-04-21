@@ -2,7 +2,10 @@
 package restore
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -123,7 +126,14 @@ func Restore(backupPath, destPath string, action RestoreAction) (*RestoreResult,
 		}
 	}
 
-	// Extract the backup
+	// Extract the backup and count files
+	fileCount, err := countFilesInBackup(backupPath)
+	if err != nil {
+		result.Error = err
+		result.Message = "Error extracting backup: " + err.Error()
+		return result, err
+	}
+
 	if err := ExtractBackup(backupPath, destPath); err != nil {
 		result.Error = err
 		result.Message = "Error extracting backup: " + err.Error()
@@ -131,8 +141,8 @@ func Restore(backupPath, destPath string, action RestoreAction) (*RestoreResult,
 	}
 
 	result.Success = true
-	result.FilesRestored = 1 // Simplified - in real scenario, count actual files
-	result.Message = fmt.Sprintf("Successfully restored to %s", destPath)
+	result.FilesRestored = fileCount
+	result.Message = fmt.Sprintf("Successfully restored %d files to %s", fileCount, destPath)
 
 	return result, nil
 }
@@ -186,4 +196,39 @@ func ValidateRestorePath(path string) error {
 // CleanupTemporary removes a temporary restore directory
 func CleanupTemporary(path string) error {
 	return os.RemoveAll(path)
+}
+
+// countFilesInBackup counts the number of files in a tar.gz backup
+func countFilesInBackup(backupPath string) (int, error) {
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return 0, fmt.Errorf("cannot open backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return 0, fmt.Errorf("cannot read gzip: %w", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+	fileCount := 0
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return 0, fmt.Errorf("error reading tar: %w", err)
+		}
+
+		// Count only regular files, not directories
+		if header.Typeflag == tar.TypeReg {
+			fileCount++
+		}
+	}
+
+	return fileCount, nil
 }
