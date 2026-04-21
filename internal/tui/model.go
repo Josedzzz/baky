@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/Josedzzz/baky/internal/config"
 	"github.com/Josedzzz/baky/internal/restore"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -85,9 +87,23 @@ func NewModel() Model {
 	ri := textinput.New()
 	ri.Placeholder = "/path/to/restore/to"
 
-	paths, _ := config.GetPaths()
-	backupDest, _ := config.GetNasPath()
-	history, _ := config.GetHistory()
+	paths, pathErr := config.GetPaths()
+	if pathErr != nil {
+		fmt.Printf("Warning: Could not load backup paths: %v\n", pathErr)
+		paths = []config.BackupPathConfig{}
+	}
+
+	backupDest, destErr := config.GetNasPath()
+	if destErr != nil {
+		fmt.Printf("Warning: Could not load NAS path: %v\n", destErr)
+		backupDest = ""
+	}
+
+	history, histErr := config.GetHistory()
+	if histErr != nil {
+		fmt.Printf("Warning: Could not load backup history: %v\n", histErr)
+		history = []config.BackupEvent{}
+	}
 
 	return Model{
 		choices:         []string{"Manage Paths", "Backup Files", "View Backups", "Backup Destination", "Exit"},

@@ -68,18 +68,13 @@ func TestCreateTarGz(t *testing.T) {
 		foundFiles[header.Name] = true
 	}
 
-	// The tar should contain the files with relative paths
-	// filepath.Base(srcDir) will be the root in the tar because of how filepath.Rel is used in createTarGz
-	// rel, err := filepath.Rel(filepath.Dir(src), path)
+	// The tar should contain the files with relative paths from the source directory
+	// After the fix, filepath.Rel(src, path) is used, so files are at the root of the tar
 	
-	base := filepath.Base(srcDir)
-	if !foundFiles[base] {
-		t.Errorf("Expected root dir %s in tar, not found", base)
+	if !foundFiles["file1.txt"] {
+		t.Errorf("Expected file1.txt in tar, not found. Found: %v", foundFiles)
 	}
-	if !foundFiles[filepath.Join(base, "file1.txt")] {
-		t.Errorf("Expected file1.txt in tar, not found")
-	}
-	if !foundFiles[filepath.Join(base, "dir1/file2.txt")] {
-		t.Errorf("Expected dir1/file2.txt in tar, not found")
+	if !foundFiles["dir1/file2.txt"] {
+		t.Errorf("Expected dir1/file2.txt in tar, not found. Found: %v", foundFiles)
 	}
 }

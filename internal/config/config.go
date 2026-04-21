@@ -3,6 +3,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -78,7 +79,9 @@ func init() {
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			if data, err := os.ReadFile("config.json"); err == nil {
 				if err := os.WriteFile(configPath, data, 0o600); err == nil {
-					os.Rename("config.json", "config.json.bak")
+					if renameErr := os.Rename("config.json", "config.json.bak"); renameErr != nil {
+						fmt.Printf("Warning: Could not backup old config: %v\n", renameErr)
+					}
 				}
 			}
 		}
@@ -90,7 +93,9 @@ func init() {
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			if data, err := os.ReadFile(macosLegacyPath); err == nil {
 				if err := os.WriteFile(configPath, data, 0o600); err == nil {
-					os.Rename(macosLegacyPath, macosLegacyPath+".bak")
+					if renameErr := os.Rename(macosLegacyPath, macosLegacyPath+".bak"); renameErr != nil {
+						fmt.Printf("Warning: Could not backup old macOS config: %v\n", renameErr)
+					}
 				}
 			}
 		}
