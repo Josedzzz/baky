@@ -234,3 +234,40 @@ type HistoryEvent struct {
 	Result     string
 	Message    string
 }
+
+// CleanupOldTempDirs removes temporary restore directories older than maxAge
+func CleanupOldTempDirs(maxAge time.Duration) error {
+	tempRoot := os.TempDir()
+	entries, err := os.ReadDir(tempRoot)
+	if err != nil {
+		return fmt.Errorf("cannot read temp directory: %w", err)
+	}
+
+	now := time.Now()
+	for _, entry := range entries {
+		// Look for baky temp directories
+		if !strings.HasPrefix(entry.Name(), "baky-restore-") {
+			continue
+		}
+
+		tempPath := filepath.Join(tempRoot, entry.Name())
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Get modification time
+		info, err := os.Stat(tempPath)
+		if err != nil {
+			continue
+		}
+
+		// Remove if older than maxAge
+		if now.Sub(info.ModTime()) > maxAge {
+			if err := os.RemoveAll(tempPath); err != nil {
+				fmt.Printf("Warning: Could not cleanup temp directory %s: %v\n", tempPath, err)
+			}
+		}
+	}
+
+	return nil
+}
