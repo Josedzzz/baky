@@ -47,8 +47,7 @@ var (
 
 	headerStyle = lipgloss.NewStyle().
 			Foreground(primaryColor).
-			Bold(true).
-			MarginBottom(1)
+			Bold(true)
 
 	processingStyle = lipgloss.NewStyle().
 			Foreground(secondaryColor).
