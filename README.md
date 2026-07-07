@@ -208,39 +208,88 @@ go build -o baky ./cmd
 go test ./...
 ```
 
-### Code Structure
-
-- **internal/backup**: Handles creating backups and monitoring file changes
-- **internal/config**: Manages configuration persistence and retrieval
-- **internal/restore**: Handles backup extraction and restoration with conflict resolution
-- **internal/tui**: Implements the terminal user interface with Bubble Tea
-
 ## Roadmap
 
-### Completed
+### Phase 1-2: Core Features (Completed)
 
-- Backup path management
-- Automatic backup scheduling and monitoring
-- View backups in TUI
+- Backup path management with add/edit/delete
+- Automatic backup scheduling (daily, weekly, on-change)
+- File watcher for on-change backups
+- View backups in TUI with scrollable list
 - Restore to original or custom location
+- Restore with conflict resolution (overwrite, rename, skip)
 - Restore history tracking
+- Backup history with filtering and sorting
 
-### In Progress
+### Phase 3: Version Comparison (High Priority)
 
-- Improve restore feedback and progress indication
+- [ ] **Backup Diff Viewer** — Compare two backup versions and show added, modified, and deleted files, similar to `git diff --stat`
+- [ ] **File Content Diff** — Show line-by-line differences for text files between two backup versions
+- [ ] **Change Preview** — Preview what files would change before restoring a specific backup version
+- [ ] **Restore Selectively from Diff** — Select individual files from the diff view to restore, rather than restoring the entire backup
 
-### Planned
+### Phase 4: GitHub Integration (High Priority)
 
-- **Version Comparison**: File-level diff between backup versions
-- **Selective Restore**: Choose individual files to restore instead of entire backup
-- **Backup Verification**: Validate backup integrity and test extraction
-- **Compression Options**: Allow different compression levels for backups
-- **Remote Storage**: Support for cloud storage backends (S3, etc.)
-- **Scheduling UI**: Visual scheduling configuration instead of frequency presets
-- **Restore Dry-run**: Preview what would be restored without making changes
-- **Search**: Search through files in backups
-- **Backup Size Analysis**: View which paths consume the most backup space
-- **Configuration Import/Export**: Share configs between systems
+- [ ] **GitHub as Backup Destination** — Add support for pushing backups to GitHub Releases or repository storage
+- [ ] **GitHub Auth** — Token-based authentication (env var, config file, or interactive prompt)
+- [ ] **Release Management** — Automatically create GitHub releases for backup snapshots
+- [ ] **Backup Sync** — Sync local backups to GitHub with progress indication
+- [ ] **Restore from GitHub** — Browse and restore backups stored in GitHub releases
+- [ ] **Cross-platform** — Works with GitHub CLI (`gh`) or direct API calls
+
+### Phase 5: Backup Quality & Reliability
+
+- [ ] **Backup Integrity Verification** — Verify tar.gz integrity after creation (checksum, test extraction)
+- [ ] **Backup Encryption** — Optional AES encryption for backups at rest (encrypt before storing to NAS)
+- [ ] **Compression Level Options** — Let users choose gzip compression level (fast, balanced, best)
+- [ ] **Backup Retention Policies** — Auto-delete old backups based on rules (keep last N, keep by age, etc.)
+- [ ] **Backup Dry-run Mode** — Simulate a backup to show what files would be included
+- [ ] **Exclude Patterns** — `.gitignore`-style glob patterns to exclude certain files/directories from backups
+
+### Phase 6: Restore Enhancements
+
+- [ ] **Selective File Restore** — Browse contents of a backup archive and choose individual files to restore instead of the entire backup
+- [ ] **Restore Dry-run** — Preview what files would be restored, where they would go, and what conflicts would arise, without making any changes
+- [ ] **Restore Progress Bar** — Show real-time progress during extraction (files extracted / total files, bytes processed)
+- [ ] **Batch Restore** — Select multiple backups at once and restore them in sequence
+- [ ] **Restore to Temporary Directory** — Extract to a temp directory and let the user review before confirming the final location
+
+### Phase 7: Storage & Destinations
+
+- [ ] **Multi-destination Support** — Backup to multiple destinations simultaneously (NAS + GitHub + S3)
+- [ ] **S3-Compatible Storage** — Support for AWS S3, MinIO, DigitalOcean Spaces, etc.
+- [ ] **SFTP/SCP Remote** — Backup directly to remote servers via SSH
+- [ ] **Local Directory** — Simple local directory as backup destination
+- [ ] **Destination Health Checks** — Test connectivity and write permissions to all configured destinations
+
+### Phase 8: Scheduling & Automation
+
+- [ ] **TUI Scheduling UI** — Visual date/time picker for backup schedules instead of fixed frequency presets
+- [ ] **Custom Cron Expressions** — Full cron expression support for advanced scheduling
+- [ ] **Run on System Events** — Trigger backups on system events (login, network mount, USB plug)
+- [ ] **Quiet / Headless Mode** — Run backups from cron or systemd timers with logging only, no TUI
+- [ ] **Desktop Notifications** — Desktop notification on backup success/failure
+
+### Phase 9: User Experience
+
+- [ ] **Search Backups** — Search through backup filenames, source paths, and timestamps
+- [ ] **Backup Statistics Dashboard** — Summary view with total backups, size, success rate, etc.
+- [ ] **Inline Log Viewer** — View backup/restore logs directly in the TUI with filtering
+- [ ] **Configuration Profiles** — Multiple named profiles for different backup scenarios (work, home, server)
+- [ ] **Configuration Import/Export** — Share configs between machines via JSON export/import
+- [ ] **Backup Size Analysis** — Visual breakdown of which paths consume the most backup storage
+- [ ] **Color Themes** — Light/dark mode toggle and custom color schemes
+- [ ] **Help System** — In-app help with keybindings and feature explanations
+
+### Phase 10: Advanced Features
+
+- [ ] **Incremental Backups** — Only backup files that changed since last full backup (significant space savings)
+- [ ] **Backup Diff Since Last Backup** — Show what files changed between the current state and the last backup
+- [ ] **Pre/Post Backup Hooks** — Run custom scripts before and after backups (e.g., stop a service, dump a DB)
+- [ ] **Backup Annotations** — Add custom labels or notes to backups for easier identification
+- [ ] **Bandwidth Limiting** — Throttle upload speed for remote backups
+- [ ] **Email/Webhook Notifications** — Send backup reports via email or webhook
+- [ ] **Snapshot Comparison Over Time** — Graph showing backup sizes and counts over time
 
 ## Configuration
 
@@ -281,7 +330,7 @@ This project is in active development. Feel free to submit issues and enhancemen
 
 ## License
 
-MIT License - feel free to use this project however you like!
+MIT License — feel free to use this project however you like!
 
 ## Support
 
