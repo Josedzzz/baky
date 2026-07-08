@@ -15,36 +15,37 @@ import (
 // If the backup contains a single root directory, it extracts the contents of that directory
 // Otherwise, it extracts all files to the destination
 func ExtractBackup(backupPath, destPath string) error {
-	// Verify backup file exists
-	if _, err := os.Stat(backupPath); err != nil {
-		return fmt.Errorf("backup file not found: %w", err)
-	}
-
-	// Open the tar.gz file
-	file, err := os.Open(backupPath)
+	rootDir, singleRoot, err := inspectBackup(backupPath)
 	if err != nil {
-		return fmt.Errorf("cannot open backup file: %w", err)
+		return err
 	}
-	defer file.Close()
 
-	// Create gzip reader
-	gzipReader, err := gzip.NewReader(file)
-	if err != nil {
-		return fmt.Errorf("cannot read gzip: %w", err)
-	}
-	defer gzipReader.Close()
-
-	// Create tar reader
-	tarReader := tar.NewReader(gzipReader)
-
-	// Create destination directory if it doesn't exist
 	if err := os.MkdirAll(destPath, 0o755); err != nil {
 		return fmt.Errorf("cannot create destination directory: %w", err)
 	}
 
-	// First pass: check if all files are under a single root directory
+	return extractFiles(backupPath, destPath, rootDir, singleRoot)
+}
+
+// inspectBackup opens a tar.gz file and scans headers to detect
+// if all files are under a single root directory.
+func inspectBackup(backupPath string) (string, bool, error) {
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return "", false, fmt.Errorf("cannot open backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return "", false, fmt.Errorf("cannot read gzip: %w", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+
 	var rootDir string
-	files := []*tar.Header{}
+	headerCount := 0
 
 	for {
 		header, err := tarReader.Next()
@@ -52,11 +53,10 @@ func ExtractBackup(backupPath, destPath string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("error reading tar: %w", err)
+			return "", false, fmt.Errorf("error reading tar: %w", err)
 		}
-		files = append(files, header)
+		headerCount++
 
-		// Extract root directory from first path
 		if rootDir == "" && header.Name != "" {
 			parts := strings.Split(strings.TrimSuffix(header.Name, "/"), string(filepath.Separator))
 			if len(parts) > 0 {
@@ -65,19 +65,47 @@ func ExtractBackup(backupPath, destPath string) error {
 		}
 	}
 
-	// Check if all files start with the same root directory
-	singleRoot := rootDir != "" && len(files) > 0
-	for _, h := range files {
-		if h.Name != "" && !strings.HasPrefix(h.Name, rootDir+string(filepath.Separator)) && h.Name != rootDir {
+	// Second pass to verify all files share the same root directory
+	singleRoot := rootDir != "" && headerCount > 0
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", false, fmt.Errorf("cannot seek backup file: %w", err)
+	}
+	if err := gzipReader.Reset(file); err != nil {
+		return "", false, fmt.Errorf("cannot reset gzip reader: %w", err)
+	}
+	tarReader = tar.NewReader(gzipReader)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", false, fmt.Errorf("error reading tar: %w", err)
+		}
+		if header.Name != "" && !strings.HasPrefix(header.Name, rootDir+string(filepath.Separator)) && header.Name != rootDir {
 			singleRoot = false
 			break
 		}
 	}
 
-	// Second pass: extract files
-	file.Seek(0, 0)
-	gzipReader, _ = gzip.NewReader(file)
-	tarReader = tar.NewReader(gzipReader)
+	return rootDir, singleRoot, nil
+}
+
+// extractFiles reads a tar.gz and extracts files, applying root directory stripping
+func extractFiles(backupPath, destPath string, rootDir string, singleRoot bool) error {
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return fmt.Errorf("cannot open backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return fmt.Errorf("cannot read gzip: %w", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
 
 	for {
 		header, err := tarReader.Next()
@@ -88,69 +116,124 @@ func ExtractBackup(backupPath, destPath string) error {
 			return fmt.Errorf("error reading tar: %w", err)
 		}
 
-		// Remove root directory prefix if all files are under a single root
 		targetName := header.Name
 		if singleRoot && (strings.HasPrefix(targetName, rootDir+string(filepath.Separator)) || targetName == rootDir) {
 			if targetName == rootDir {
-				continue // Skip the root directory itself
+				continue
 			}
 			targetName = strings.TrimPrefix(targetName, rootDir+string(filepath.Separator))
 		}
 
-		// Construct the full file path
 		targetPath := filepath.Join(destPath, targetName)
 
-		// Prevent path traversal attacks
 		if !isPathSafe(destPath, targetPath) {
 			return fmt.Errorf("unsafe path detected: %s", header.Name)
 		}
 
-		// Handle different file types
-		switch header.Typeflag {
-		case tar.TypeDir:
-			// Create directory
-			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
-				return fmt.Errorf("cannot create directory %s: %w", targetPath, err)
-			}
+		if err := writeFile(targetPath, targetPath != destPath, header, tarReader); err != nil {
+			return err
+		}
+	}
 
-		case tar.TypeReg:
-			// Create parent directories if needed
+	return nil
+}
+
+// extractFilesWithCallback extracts a tar.gz and calls progressCallback per file
+func extractFilesWithCallback(backupPath, destPath string, rootDir string, singleRoot bool, progressCallback func(current, total int64)) error {
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return fmt.Errorf("cannot open backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return fmt.Errorf("cannot read gzip: %w", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+
+	var processedSize int64
+	fileInfo, err := os.Stat(backupPath)
+	totalSize := int64(0)
+	if err == nil {
+		totalSize = fileInfo.Size()
+	}
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error reading tar: %w", err)
+		}
+
+		if progressCallback != nil && totalSize > 0 {
+			processedSize += header.Size
+			progressCallback(processedSize, totalSize)
+		}
+
+		targetName := header.Name
+		if singleRoot && (strings.HasPrefix(targetName, rootDir+string(filepath.Separator)) || targetName == rootDir) {
+			if targetName == rootDir {
+				continue
+			}
+			targetName = strings.TrimPrefix(targetName, rootDir+string(filepath.Separator))
+		}
+
+		targetPath := filepath.Join(destPath, targetName)
+
+		if !isPathSafe(destPath, targetPath) {
+			return fmt.Errorf("unsafe path detected: %s", header.Name)
+		}
+
+		if err := writeFile(targetPath, targetPath != destPath, header, tarReader); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// writeFile creates a file or directory from a tar header
+func writeFile(targetPath string, ensureParent bool, header *tar.Header, tarReader *tar.Reader) error {
+	switch header.Typeflag {
+	case tar.TypeDir:
+		if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+			return fmt.Errorf("cannot create directory %s: %w", targetPath, err)
+		}
+
+	case tar.TypeReg:
+		if ensureParent {
 			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 				return fmt.Errorf("cannot create parent directory: %w", err)
 			}
+		}
 
-			// Create file
-			outFile, err := os.Create(targetPath)
-			if err != nil {
-				return fmt.Errorf("cannot create file %s: %w", targetPath, err)
-			}
+		outFile, err := os.Create(targetPath)
+		if err != nil {
+			return fmt.Errorf("cannot create file %s: %w", targetPath, err)
+		}
 
-			// Copy file contents
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
-				return fmt.Errorf("cannot write file %s: %w", targetPath, err)
-			}
-
-			// Set file permissions
-			if err := os.Chmod(targetPath, os.FileMode(header.Mode)); err != nil {
-				outFile.Close()
-				return fmt.Errorf("cannot set file permissions: %w", err)
-			}
-
+		if _, err := io.Copy(outFile, tarReader); err != nil {
 			outFile.Close()
+			return fmt.Errorf("cannot write file %s: %w", targetPath, err)
+		}
 
-		case tar.TypeSymlink:
-			// Handle symlinks
-			if err := os.Symlink(header.Linkname, targetPath); err != nil {
-				// Ignore if symlink already exists
-				if !os.IsExist(err) {
-					return fmt.Errorf("cannot create symlink %s: %w", targetPath, err)
-				}
+		if err := os.Chmod(targetPath, os.FileMode(header.Mode)); err != nil {
+			outFile.Close()
+			return fmt.Errorf("cannot set file permissions: %w", err)
+		}
+
+		outFile.Close()
+
+	case tar.TypeSymlink:
+		if err := os.Symlink(header.Linkname, targetPath); err != nil {
+			if !os.IsExist(err) {
+				return fmt.Errorf("cannot create symlink %s: %w", targetPath, err)
 			}
-
-		default:
-			// Skip unsupported file types
-			continue
 		}
 	}
 
@@ -177,107 +260,19 @@ func isPathSafe(destPath, targetPath string) bool {
 	}
 
 	// If rel starts with "..", it's outside destPath
-	return !filepath.IsAbs(rel) && rel != ".."
+	return !strings.HasPrefix(rel, "..")
 }
 
 // ExtractBackupWithProgress extracts a backup and calls a progress callback
 func ExtractBackupWithProgress(backupPath, destPath string, progressCallback func(current, total int64)) error {
-	// Verify backup file exists
-	fileInfo, err := os.Stat(backupPath)
+	rootDir, singleRoot, err := inspectBackup(backupPath)
 	if err != nil {
-		return fmt.Errorf("backup file not found: %w", err)
+		return err
 	}
 
-	totalSize := fileInfo.Size()
-
-	// Open the tar.gz file
-	file, err := os.Open(backupPath)
-	if err != nil {
-		return fmt.Errorf("cannot open backup file: %w", err)
-	}
-	defer file.Close()
-
-	// Create gzip reader
-	gzipReader, err := gzip.NewReader(file)
-	if err != nil {
-		return fmt.Errorf("cannot read gzip: %w", err)
-	}
-	defer gzipReader.Close()
-
-	// Create tar reader
-	tarReader := tar.NewReader(gzipReader)
-
-	// Create destination directory if it doesn't exist
 	if err := os.MkdirAll(destPath, 0o755); err != nil {
 		return fmt.Errorf("cannot create destination directory: %w", err)
 	}
 
-	var processedSize int64
-
-	// Extract all files
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading tar: %w", err)
-		}
-
-		// Update progress
-		if progressCallback != nil && totalSize > 0 {
-			processedSize += header.Size
-			progressCallback(processedSize, totalSize)
-		}
-
-		// Construct the full file path
-		targetPath := filepath.Join(destPath, header.Name)
-
-		// Prevent path traversal attacks
-		if !isPathSafe(destPath, targetPath) {
-			return fmt.Errorf("unsafe path detected: %s", header.Name)
-		}
-
-		// Handle different file types
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
-				return fmt.Errorf("cannot create directory %s: %w", targetPath, err)
-			}
-
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				return fmt.Errorf("cannot create parent directory: %w", err)
-			}
-
-			outFile, err := os.Create(targetPath)
-			if err != nil {
-				return fmt.Errorf("cannot create file %s: %w", targetPath, err)
-			}
-
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
-				return fmt.Errorf("cannot write file %s: %w", targetPath, err)
-			}
-
-			if err := os.Chmod(targetPath, os.FileMode(header.Mode)); err != nil {
-				outFile.Close()
-				return fmt.Errorf("cannot set file permissions: %w", err)
-			}
-
-			outFile.Close()
-
-		case tar.TypeSymlink:
-			if err := os.Symlink(header.Linkname, targetPath); err != nil {
-				if !os.IsExist(err) {
-					return fmt.Errorf("cannot create symlink %s: %w", targetPath, err)
-				}
-			}
-
-		default:
-			continue
-		}
-	}
-
-	return nil
+	return extractFilesWithCallback(backupPath, destPath, rootDir, singleRoot, progressCallback)
 }

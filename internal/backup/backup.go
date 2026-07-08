@@ -238,9 +238,9 @@ func StartScheduler() {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
-		lastDailyRun := time.Time{}
-		lastWeeklyRun := time.Time{}
-		
+		lastDailyRun := make(map[string]time.Time)
+		lastWeeklyRun := make(map[string]time.Time)
+
 		for range ticker.C {
 			now := time.Now()
 			paths, pathErr := config.GetPaths()
@@ -252,18 +252,24 @@ func StartScheduler() {
 			for _, p := range paths {
 				switch p.Frequency {
 				case config.FreqDaily:
-					// Daily backup logic: run once per day at 3 AM
-					if now.Hour() == 3 && now.Sub(lastDailyRun) > 24*time.Hour {
+					last, ok := lastDailyRun[p.Path]
+					if !ok {
+						last = time.Time{}
+					}
+					if now.Hour() == 3 && (last.IsZero() || now.Sub(last) > 24*time.Hour) {
 						fmt.Printf("Daily backup triggered for: %s\n", p.Path)
 						RunBackup(p.Path)
-						lastDailyRun = now
+						lastDailyRun[p.Path] = now
 					}
 				case config.FreqWeekly:
-					// Weekly backup logic: run once per week on Sunday at 3 AM
-					if now.Weekday() == time.Sunday && now.Hour() == 3 && now.Sub(lastWeeklyRun) > 24*7*time.Hour {
+					last, ok := lastWeeklyRun[p.Path]
+					if !ok {
+						last = time.Time{}
+					}
+					if now.Weekday() == time.Sunday && now.Hour() == 3 && (last.IsZero() || now.Sub(last) > 24*7*time.Hour) {
 						fmt.Printf("Weekly backup triggered for: %s\n", p.Path)
 						RunBackup(p.Path)
-						lastWeeklyRun = now
+						lastWeeklyRun[p.Path] = now
 					}
 				}
 			}

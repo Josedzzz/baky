@@ -110,6 +110,10 @@ func GetAllBackupsEnhanced(nasPath string, configPaths []ConfigPath) ([]BackupIn
 	pathMap := make(map[string]string)
 	for _, configPath := range configPaths {
 		basename := filepath.Base(configPath.Path)
+		if _, exists := pathMap[basename]; exists {
+			fmt.Printf("Warning: Duplicate basename '%s' for paths '%s' and '%s'. Backup resolution may be ambiguous.\n",
+				basename, pathMap[basename], configPath.Path)
+		}
 		pathMap[basename] = configPath.Path
 	}
 
