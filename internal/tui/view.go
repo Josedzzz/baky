@@ -96,6 +96,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.isSuccess = false
 			}
 		}
+		// Refresh backup list and preserve the result message
+		savedMsg := m.message
+		savedSuccess := m.isSuccess
+		m.loadBackups()
+		m.message = savedMsg
+		m.isSuccess = savedSuccess
 		m.state = viewBackupsView
 		m.selectedBackup = nil
 		return m, nil
@@ -162,29 +168,7 @@ func (m Model) handleMenuUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.historyOffset = 0
 				m.message = ""
 			case "View Backups":
-				// Load backups from NAS with full paths from config
-				nasPath, _ := config.GetNasPath()
-				if nasPath != "" {
-					// Convert BackupPathConfig to ConfigPath for GetAllBackupsEnhanced
-					paths, _ := config.GetPaths()
-					configPaths := make([]restore.ConfigPath, len(paths))
-					for i, p := range paths {
-						configPaths[i] = restore.ConfigPath{Path: p.Path}
-					}
-					if backups, err := restore.GetAllBackupsEnhanced(nasPath, configPaths); err == nil {
-						m.allBackups = backups
-						m.message = fmt.Sprintf("Found %d backups", len(backups))
-						m.isSuccess = true
-					} else {
-						m.message = "Error loading backups: " + err.Error()
-						m.isSuccess = false
-						m.allBackups = []restore.BackupInfo{}
-					}
-				} else {
-					m.message = "Backup destination not configured"
-					m.isSuccess = false
-					m.allBackups = []restore.BackupInfo{}
-				}
+				m.loadBackups()
 				m.state = viewBackupsView
 				m.backupsCursor = 0
 				m.backupsOffset = 0
@@ -708,6 +692,46 @@ func (m Model) formatRelativeTime(t time.Time) string {
 	default:
 		return t.Format("Jan 02 15:04")
 	}
+}
+
+// loadBackups loads backups from NAS with full paths and real status from history
+func (m *Model) loadBackups() {
+	nasPath, _ := config.GetNasPath()
+	if nasPath == "" {
+		m.message = "Backup destination not configured"
+		m.isSuccess = false
+		m.allBackups = []restore.BackupInfo{}
+		return
+	}
+
+	paths, _ := config.GetPaths()
+	configPaths := make([]restore.ConfigPath, len(paths))
+	for i, p := range paths {
+		configPaths[i] = restore.ConfigPath{Path: p.Path}
+	}
+
+	hist, _ := config.GetHistory()
+	historyEvents := make([]restore.HistoryEvent, len(hist))
+	for i, h := range hist {
+		historyEvents[i] = restore.HistoryEvent{
+			SourcePath: h.Path,
+			Timestamp:  h.Timestamp,
+			Result:     h.Result,
+			Message:    h.Message,
+		}
+	}
+
+	backups, err := restore.GetAllBackupsEnhanced(nasPath, configPaths, historyEvents)
+	if err != nil {
+		m.message = "Error loading backups: " + err.Error()
+		m.isSuccess = false
+		m.allBackups = []restore.BackupInfo{}
+		return
+	}
+
+	m.allBackups = backups
+	m.message = fmt.Sprintf("Found %d backups", len(backups))
+	m.isSuccess = true
 }
 
 // handleViewBackupsUpdate handles key messages in the view backups

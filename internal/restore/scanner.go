@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 )
@@ -100,7 +99,8 @@ func GetAllBackups(nasPath string) ([]BackupInfo, error) {
 }
 
 // GetAllBackupsEnhanced returns a flat list of all backups with full source paths from config
-func GetAllBackupsEnhanced(nasPath string, configPaths []ConfigPath) ([]BackupInfo, error) {
+// and real result status from history.
+func GetAllBackupsEnhanced(nasPath string, configPaths []ConfigPath, historyEvents []HistoryEvent) ([]BackupInfo, error) {
 	backups, err := GetAllBackups(nasPath)
 	if err != nil {
 		return nil, err
@@ -117,13 +117,15 @@ func GetAllBackupsEnhanced(nasPath string, configPaths []ConfigPath) ([]BackupIn
 		pathMap[basename] = configPath.Path
 	}
 
-	// Enhance backups with full paths from config
+	// Enhance backups with full paths and history
 	for i := range backups {
 		basename := backups[i].SourcePath
 		if fullPath, exists := pathMap[basename]; exists {
 			backups[i].SourcePath = fullPath
 		}
 	}
+
+	backups = EnhanceBackupsWithHistory(backups, historyEvents)
 
 	return backups, nil
 }
@@ -212,9 +214,7 @@ func matchesBackup(backup *BackupInfo, event HistoryEvent) bool {
 // sortBackupsByTimestamp sorts backups by timestamp in descending order (newest first)
 // sortBackupsByTimestamp sorts backups by timestamp in descending order (newest first)
 func sortBackupsByTimestamp(backups []BackupInfo) {
-	sort.Slice(backups, func(i, j int) bool {
-		return backups[j].Timestamp.Before(backups[i].Timestamp)
-	})
+	SortBackupsByTimestamp(backups)
 }
 
 // FormatFileSize converts bytes to human-readable format (KB, MB, GB, etc.)
