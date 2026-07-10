@@ -47,7 +47,7 @@ func GroupBackupsBySource(backups []BackupInfo) map[string][]BackupInfo {
 	}
 	// Sort each group by timestamp (newest first)
 	for source := range grouped {
-		sortBackupsByTimestamp(grouped[source])
+		SortBackupsByTimestamp(grouped[source])
 	}
 	return grouped
 }

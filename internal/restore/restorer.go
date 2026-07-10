@@ -15,8 +15,11 @@ import (
 type RestoreAction int
 
 const (
+	// RestoreActionOverwrite replaces existing files with backup content
 	RestoreActionOverwrite RestoreAction = iota
+	// RestoreActionRename renames existing files with a timestamp suffix
 	RestoreActionRename
+	// RestoreActionSkip preserves existing files and aborts the restore
 	RestoreActionSkip
 )
 
@@ -61,7 +64,10 @@ func CheckForConflicts(destPath string) ([]ConflictInfo, error) {
 			return err
 		}
 
-		rel, _ := filepath.Rel(destPath, path)
+		rel, err := filepath.Rel(destPath, path)
+		if err != nil {
+			return fmt.Errorf("cannot compute relative path: %w", err)
+		}
 		if rel == "." {
 			return nil
 		}

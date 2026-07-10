@@ -74,7 +74,7 @@ func ScanBackups(nasPath string) (map[string]*BackupList, error) {
 	// Update counts and sort each backup list by timestamp (newest first)
 	for _, backupList := range backupsBySource {
 		backupList.Count = len(backupList.Backups)
-		sortBackupsByTimestamp(backupList.Backups)
+		SortBackupsByTimestamp(backupList.Backups)
 	}
 
 	return backupsBySource, nil
@@ -93,7 +93,7 @@ func GetAllBackups(nasPath string) ([]BackupInfo, error) {
 	}
 
 	// Sort all backups by timestamp (newest first)
-	sortBackupsByTimestamp(allBackups)
+	SortBackupsByTimestamp(allBackups)
 
 	return allBackups, nil
 }
@@ -209,12 +209,6 @@ func matchesBackup(backup *BackupInfo, event HistoryEvent) bool {
 	sourceName := filepath.Base(event.SourcePath)
 	return strings.HasPrefix(backup.Filename, sourceName) &&
 		backup.Timestamp.Sub(event.Timestamp).Abs() < time.Second
-}
-
-// sortBackupsByTimestamp sorts backups by timestamp in descending order (newest first)
-// sortBackupsByTimestamp sorts backups by timestamp in descending order (newest first)
-func sortBackupsByTimestamp(backups []BackupInfo) {
-	SortBackupsByTimestamp(backups)
 }
 
 // FormatFileSize converts bytes to human-readable format (KB, MB, GB, etc.)

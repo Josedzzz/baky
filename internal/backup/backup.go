@@ -125,14 +125,15 @@ func StartWatcher() error {
 		return err
 	}
 
+	w := watcher
 	go func() {
-		defer watcher.Close()
+		defer w.Close()
 		// debounce timers map
 		timers := make(map[string]*time.Timer)
 
 		for {
 			select {
-			case event, ok := <-watcher.Events:
+			case event, ok := <-w.Events:
 				if !ok {
 					return
 				}
@@ -157,7 +158,7 @@ func StartWatcher() error {
 						}
 					}
 				}
-			case err, ok := <-watcher.Errors:
+			case err, ok := <-w.Errors:
 				if !ok {
 					return
 				}

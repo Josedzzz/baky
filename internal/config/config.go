@@ -11,10 +11,14 @@ import (
 )
 
 const (
-	ConfigFile   = "config.json"
+	// ConfigFile is the name of the configuration file
+	ConfigFile = "config.json"
+	// FreqOnChange triggers a backup whenever a file change is detected
 	FreqOnChange = "on_change"
-	FreqDaily    = "daily"
-	FreqWeekly   = "weekly"
+	// FreqDaily triggers a backup once per day at 3 AM
+	FreqDaily = "daily"
+	// FreqWeekly triggers a backup once per week on Sunday at 3 AM
+	FreqWeekly = "weekly"
 )
 
 // BackupPathConfig represents a configured backup path
