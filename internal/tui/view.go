@@ -823,6 +823,10 @@ func (m Model) handleSelectRestoreActionUpdate(msg tea.KeyMsg) (tea.Model, tea.C
 			m.restoreActionIndex++
 		}
 	case "enter":
+		// A restore is already running: ignore repeated presses
+		if m.isRestoring {
+			return m, nil
+		}
 		// Perform the restore
 		m.isRestoring = true
 		m.message = "Restoring... Please wait."
