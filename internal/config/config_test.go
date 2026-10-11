@@ -233,3 +233,45 @@ func TestConfigBackupWatches(t *testing.T) {
 		t.Errorf("expected no watches, got %+v", cb.Watches)
 	}
 }
+
+func TestImportMagitiConfig(t *testing.T) {
+	useTempConfig(t)
+
+	old := filepath.Join(t.TempDir(), "config.json")
+	os.WriteFile(old, []byte(`{
+  "watch_dir": "/home/miguel/simulacion-configs",
+  "repo_dir": "/home/miguel/proyectos/magiti-config-backup",
+  "carpetas": {"vpn": "vpn", "firewall": "firewall", "dns2": "dns2"}
+}`), 0o644)
+
+	added, err := ImportMagitiConfig(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(added) != 3 {
+		t.Fatalf("expected 3 watches, got %+v", added)
+	}
+
+	cb, _ := GetConfigBackup()
+	want := []WatchConfig{
+		{Source: "/home/miguel/simulacion-configs/dns2", Dest: "dns2"},
+		{Source: "/home/miguel/simulacion-configs/firewall", Dest: "firewall"},
+		{Source: "/home/miguel/simulacion-configs/vpn", Dest: "vpn"},
+	}
+	if len(cb.Watches) != 3 || cb.Watches[0] != want[0] || cb.Watches[1] != want[1] || cb.Watches[2] != want[2] {
+		t.Errorf("unexpected watches: %+v", cb.Watches)
+	}
+	if cb.RepoDir != "" {
+		t.Errorf("the old repository must not be imported, got %q", cb.RepoDir)
+	}
+
+	// Importing twice reports the duplicate instead of adding it again
+	if _, err := ImportMagitiConfig(old); err == nil {
+		t.Errorf("expected an error importing the same folders twice")
+	}
+
+	os.WriteFile(old, []byte(`not json`), 0o644)
+	if _, err := ImportMagitiConfig(old); err == nil {
+		t.Errorf("expected an error for an invalid file")
+	}
+}
