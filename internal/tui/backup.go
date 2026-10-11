@@ -15,6 +15,21 @@ type backupFinishedMsg struct {
 	path string
 }
 
+// handleBackupFinished shows the result of a manual backup
+func (m Model) handleBackupFinished(msg backupFinishedMsg) (tea.Model, tea.Cmd) {
+	m.isProcessing = false
+	// Refresh history and paths: a failed backup is recorded too
+	m.reloadPaths()
+	if msg.err != nil {
+		m.message = "El respaldo falló: " + msg.err.Error()
+		m.isSuccess = false
+	} else {
+		m.message = "Respaldo completado correctamente."
+		m.isSuccess = true
+	}
+	return m, nil
+}
+
 func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
@@ -45,37 +60,36 @@ func (m Model) handleBackupFilesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "esc":
-		m.state = menuView
-		m.message = ""
+		return m.back(filesMenuView)
 	}
 	return m, nil
 }
 
 func (m Model) formatRelativeTime(t time.Time) string {
 	if t.IsZero() {
-		return "Never"
+		return "nunca"
 	}
 
 	diff := time.Since(t)
 	switch {
 	case diff < time.Minute:
-		return "Just now"
+		return "ahora mismo"
 	case diff < time.Hour:
-		return fmt.Sprintf("%d mins ago", int(diff.Minutes()))
+		return fmt.Sprintf("hace %d min", int(diff.Minutes()))
 	case diff < 24*time.Hour:
-		return fmt.Sprintf("%d hours ago", int(diff.Hours()))
+		return fmt.Sprintf("hace %d h", int(diff.Hours()))
 	default:
-		return t.Format("Jan 02 15:04")
+		return t.Format("2006-01-02 15:04")
 	}
 }
 
 // renderBackupFiles renders the manual backup screen with the recent history
 func (m Model) renderBackupFiles(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" BACKUP FILES ") + "\n\n")
+	body.WriteString(titleStyle.Render(" RESPALDAR AHORA ") + "\n\n")
 	if len(m.paths) == 0 {
-		body.WriteString("No paths configured to backup.\n\n")
+		body.WriteString("No hay rutas configuradas para respaldar.\n\n")
 	} else {
-		body.WriteString(headerStyle.Render("Select path for manual backup:") + "\n")
+		body.WriteString(headerStyle.Render("Seleccione la ruta a respaldar:") + "\n")
 		// Only show up to 3 paths to save space
 		start := 0
 		if m.pathsCursor > 2 {
@@ -93,18 +107,15 @@ func (m Model) renderBackupFiles(body *strings.Builder) {
 	}
 
 	if m.isProcessing {
-		body.WriteString(processingStyle.Render("Processing backup... Please wait.") + "\n\n")
+		body.WriteString(processingStyle.Render("Respaldando... Por favor espere.") + "\n\n")
 	} else if m.message != "" {
-		style := errorStyle
-		if m.isSuccess {
-			style = successStyle
-		}
-		body.WriteString(style.Render(m.message) + "\n\n")
+		m.renderMessage(body)
+		body.WriteString("\n")
 	}
 
-	body.WriteString(headerStyle.Render("Recent Backups:") + "\n")
+	body.WriteString(headerStyle.Render("Respaldos recientes:") + "\n")
 	if len(m.history) == 0 {
-		body.WriteString("No history available.\n")
+		body.WriteString("Sin historial.\n")
 	} else {
 		// Show up to 4 history items with scrolling
 		visibleHistory := 4
@@ -129,10 +140,9 @@ func (m Model) renderBackupFiles(body *strings.Builder) {
 		// Add scroll indicator
 		if len(m.history) > visibleHistory {
 			scrollPercentage := int((float64(m.historyOffset+visibleHistory) / float64(len(m.history))) * 100)
-			scrollIndicator := fmt.Sprintf("\n[Logs: %d/%d - %d%%]", m.historyOffset+1, len(m.history), scrollPercentage)
+			scrollIndicator := fmt.Sprintf("\n[Historial: %d/%d - %d%%]", m.historyOffset+1, len(m.history), scrollPercentage)
 			body.WriteString(statusStyle.Render(scrollIndicator) + "\n")
 		}
 	}
-	body.WriteString(footerStyle.Render("\nenter: start • esc: back • ↑/↓: paths • pgup/pgdn: logs"))
-
+	body.WriteString(footerStyle.Render("\nenter: respaldar • ↑/↓: rutas • pgup/pgdn: historial • esc: volver"))
 }

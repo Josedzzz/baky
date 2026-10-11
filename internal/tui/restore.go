@@ -15,11 +15,48 @@ type restoreFinishedMsg struct {
 	err    error
 }
 
+// handleRestoreFinished shows and records the result of a restore
+func (m Model) handleRestoreFinished(msg restoreFinishedMsg) (tea.Model, tea.Cmd) {
+	m.isRestoring = false
+
+	var message string
+	success := false
+	switch {
+	case msg.err != nil:
+		message = "La restauración falló: " + msg.err.Error()
+	case msg.result != nil && msg.result.Success:
+		message = msg.result.Message
+		success = true
+	case msg.result != nil:
+		message = "Restauración incompleta: " + msg.result.Message
+	}
+
+	// Log restore event, failures included
+	if m.selectedBackup != nil && msg.result != nil {
+		config.LogRestore(
+			m.selectedBackup.Filename,
+			m.selectedBackup.SourcePath,
+			msg.result.DestinationPath,
+			actionLabel(msg.result.Action),
+			success,
+			msg.result.Message,
+		)
+	}
+
+	// Refresh backup list and keep the result message
+	m.loadBackups()
+	m.message = message
+	m.isSuccess = success
+	m.state = viewBackupsView
+	m.selectedBackup = nil
+	return m, nil
+}
+
 // loadBackups loads backups from NAS with full paths and real status from history
 func (m *Model) loadBackups() {
 	nasPath, _ := config.GetNasPath()
 	if nasPath == "" {
-		m.message = "Backup destination not configured"
+		m.message = "El destino de respaldo no está configurado"
 		m.isSuccess = false
 		m.allBackups = []restore.BackupInfo{}
 		return
@@ -44,14 +81,14 @@ func (m *Model) loadBackups() {
 
 	backups, err := restore.GetAllBackupsEnhanced(nasPath, configPaths, historyEvents)
 	if err != nil {
-		m.message = "Error loading backups: " + err.Error()
+		m.message = "No se pudieron cargar los respaldos: " + err.Error()
 		m.isSuccess = false
 		m.allBackups = []restore.BackupInfo{}
 		return
 	}
 
 	m.allBackups = backups
-	m.message = fmt.Sprintf("Found %d backups", len(backups))
+	m.message = fmt.Sprintf("%d respaldos encontrados", len(backups))
 	m.isSuccess = true
 }
 
@@ -79,8 +116,8 @@ func (m Model) handleViewBackupsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Scroll up
 		if m.backupsOffset > 0 {
 			m.backupsOffset--
-			if m.backupsCursor > m.backupsOffset+6 {
-				m.backupsCursor = m.backupsOffset + 6
+			if m.backupsCursor > m.backupsOffset+5 {
+				m.backupsCursor = m.backupsOffset + 5
 			}
 		}
 	case "pgdown":
@@ -102,9 +139,8 @@ func (m Model) handleViewBackupsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = ""
 		}
 	case "esc":
-		m.state = menuView
-		m.message = ""
 		m.allBackups = []restore.BackupInfo{}
+		return m.back(filesMenuView)
 	}
 	return m, nil
 }
@@ -134,6 +170,11 @@ func (m Model) handleSelectRestoreDestUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd
 
 // handleSelectRestoreActionUpdate handles conflict resolution action selection
 func (m Model) handleSelectRestoreActionUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// A restore is already running: ignore every key until it finishes
+	if m.isRestoring {
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "up", "k":
 		if m.restoreActionIndex > 0 {
@@ -144,13 +185,9 @@ func (m Model) handleSelectRestoreActionUpdate(msg tea.KeyMsg) (tea.Model, tea.C
 			m.restoreActionIndex++
 		}
 	case "enter":
-		// A restore is already running: ignore repeated presses
-		if m.isRestoring {
-			return m, nil
-		}
 		// Perform the restore
 		m.isRestoring = true
-		m.message = "Restoring... Please wait."
+		m.message = ""
 
 		actions := []restore.RestoreAction{
 			restore.RestoreActionOverwrite,
@@ -160,8 +197,9 @@ func (m Model) handleSelectRestoreActionUpdate(msg tea.KeyMsg) (tea.Model, tea.C
 		m.restoreAction = actions[m.restoreActionIndex]
 
 		// Execute restore in background
+		backupPath, restorePath, action := m.selectedBackup.FullPath, m.restorePath, m.restoreAction
 		return m, func() tea.Msg {
-			result, err := restore.Restore(m.selectedBackup.FullPath, m.restorePath, m.restoreAction)
+			result, err := restore.Restore(backupPath, restorePath, action)
 			return restoreFinishedMsg{result: result, err: err}
 		}
 	case "esc":
@@ -178,13 +216,14 @@ func (m Model) handleRestoreInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.state = selectRestoreDestView
 		m.restoreInput.Reset()
+		m.message = ""
 		return m, nil
 	case "enter":
-		path := m.restoreInput.Value()
+		path := strings.TrimSpace(m.restoreInput.Value())
 		if path != "" {
 			// Validate path
 			if err := restore.ValidateRestorePath(path); err != nil {
-				m.message = "Invalid path: " + err.Error()
+				m.message = "Ruta inválida: " + err.Error()
 				m.isSuccess = false
 				return m, nil
 			}
@@ -202,17 +241,17 @@ func (m Model) handleRestoreInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // renderViewBackups renders the list of available backups
 func (m Model) renderViewBackups(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" VIEW BACKUPS ") + "\n\n")
+	body.WriteString(titleStyle.Render(" VER RESPALDOS ") + "\n\n")
 	if len(m.allBackups) == 0 {
-		body.WriteString("No backups found.\n\n")
+		body.WriteString("No se encontraron respaldos.\n\n")
 	} else {
-		body.WriteString(headerStyle.Render("Available Backups:") + "\n")
+		body.WriteString(headerStyle.Render("Respaldos disponibles:") + "\n")
 		// Show up to 6 backups at a time
 		visibleBackups := 6
 		for i := m.backupsOffset; i < len(m.allBackups) && i < m.backupsOffset+visibleBackups; i++ {
 			b := m.allBackups[i]
 			style := itemStyle
-			if m.backupsCursor-m.backupsOffset == i-m.backupsOffset {
+			if m.backupsCursor == i {
 				style = selectedItemStyle
 			}
 
@@ -236,66 +275,52 @@ func (m Model) renderViewBackups(body *strings.Builder) {
 		// Add scroll indicator
 		if len(m.allBackups) > visibleBackups {
 			scrollPercentage := int((float64(m.backupsOffset+visibleBackups) / float64(len(m.allBackups))) * 100)
-			scrollIndicator := fmt.Sprintf("\n[Backups: %d/%d - %d%%]", m.backupsOffset+1, len(m.allBackups), scrollPercentage)
+			scrollIndicator := fmt.Sprintf("\n[Respaldos: %d/%d - %d%%]", m.backupsOffset+1, len(m.allBackups), scrollPercentage)
 			body.WriteString(statusStyle.Render(scrollIndicator) + "\n")
 		}
 	}
 
-	if m.message != "" {
-		style := errorStyle
-		if m.isSuccess {
-			style = successStyle
-		}
-		body.WriteString(style.Render(m.message) + "\n")
-	}
+	m.renderMessage(body)
 
-	body.WriteString(footerStyle.Render("\nenter: restore • esc: back • ↑/↓: scroll • pgup/pgdn: scroll more"))
-
+	body.WriteString(footerStyle.Render("\nenter: restaurar • ↑/↓: desplazar • pgup/pgdn: desplazar más • esc: volver"))
 }
 
 // renderSelectRestoreDest renders the restore destination selection screen
 func (m Model) renderSelectRestoreDest(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" SELECT RESTORE DESTINATION ") + "\n\n")
-	body.WriteString(headerStyle.Render("Backup: ") + itemStyle.Render(m.selectedBackup.Filename) + "\n")
-	body.WriteString(headerStyle.Render("Source: ") + itemStyle.Render(m.selectedBackup.SourcePath) + "\n\n")
+	body.WriteString(titleStyle.Render(" DESTINO DE LA RESTAURACIÓN ") + "\n\n")
+	body.WriteString(headerStyle.Render("Respaldo: ") + itemStyle.Render(m.selectedBackup.Filename) + "\n")
+	body.WriteString(headerStyle.Render("Origen:   ") + itemStyle.Render(m.selectedBackup.SourcePath) + "\n\n")
 
-	body.WriteString(headerStyle.Render("Where do you want to restore?") + "\n\n")
-	body.WriteString("o - Original location: " + m.selectedBackup.SourcePath + "\n")
-	body.WriteString("c - Choose custom path\n\n")
+	body.WriteString(headerStyle.Render("¿Dónde desea restaurar?") + "\n\n")
+	body.WriteString("o - Ubicación original: " + m.selectedBackup.SourcePath + "\n")
+	body.WriteString("c - Elegir otra ruta\n\n")
 
-	if m.message != "" {
-		style := errorStyle
-		if m.isSuccess {
-			style = successStyle
-		}
-		body.WriteString(style.Render(m.message) + "\n")
-	}
+	m.renderMessage(body)
 
-	body.WriteString(footerStyle.Render("o: original • c: custom • esc: back"))
-
+	body.WriteString(footerStyle.Render("o: original • c: otra ruta • esc: volver"))
 }
 
 // renderRestoreInput renders the custom restore path input screen
 func (m Model) renderRestoreInput(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" ENTER RESTORE PATH ") + "\n\n")
+	body.WriteString(titleStyle.Render(" RUTA DE RESTAURACIÓN ") + "\n\n")
 	fmt.Fprintf(body,
-		"Enter restore destination path:\n\n%s\n\n%s",
+		"Ruta donde restaurar el respaldo:\n\n%s\n\n",
 		m.restoreInput.View(),
-		footerStyle.Render("(esc to cancel • enter to confirm)"),
 	)
-
+	m.renderMessage(body)
+	body.WriteString(footerStyle.Render("(esc: cancelar • enter: confirmar)"))
 }
 
 // renderSelectRestoreAction renders the conflict resolution screen
 func (m Model) renderSelectRestoreAction(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" CONFLICT RESOLUTION ") + "\n\n")
-	body.WriteString(headerStyle.Render("Restore to: ") + itemStyle.Render(m.restorePath) + "\n\n")
-	body.WriteString(headerStyle.Render("Files exist at destination. What should we do?") + "\n\n")
+	body.WriteString(titleStyle.Render(" ARCHIVOS EXISTENTES ") + "\n\n")
+	body.WriteString(headerStyle.Render("Restaurar en: ") + itemStyle.Render(m.restorePath) + "\n\n")
+	body.WriteString(headerStyle.Render("Si ya hay archivos en el destino, ¿qué hacemos?") + "\n\n")
 
 	actions := []string{
-		"✓ Overwrite - Replace existing files",
-		"↻ Rename    - Rename existing files with timestamp",
-		"✗ Skip      - Don't restore",
+		"✓ Sobrescribir - Reemplaza los archivos del respaldo; conserva los demás",
+		"↻ Renombrar    - Guarda lo existente con fecha y restaura el respaldo",
+		"✗ Omitir       - No restaura si ya hay archivos",
 	}
 
 	for i, action := range actions {
@@ -308,14 +333,10 @@ func (m Model) renderSelectRestoreAction(body *strings.Builder) {
 
 	body.WriteString("\n")
 	if m.isRestoring {
-		body.WriteString(processingStyle.Render("Restoring... Please wait.") + "\n")
-	} else if m.message != "" {
-		style := errorStyle
-		if m.isSuccess {
-			style = successStyle
-		}
-		body.WriteString(style.Render(m.message) + "\n")
+		body.WriteString(processingStyle.Render("Restaurando... Por favor espere.") + "\n")
+	} else {
+		m.renderMessage(body)
 	}
 
-	body.WriteString(footerStyle.Render("\n↑/↓: select • enter: confirm • esc: back"))
+	body.WriteString(footerStyle.Render("\n↑/↓: seleccionar • enter: confirmar • esc: volver"))
 }

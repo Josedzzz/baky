@@ -2,7 +2,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/Josedzzz/baky/internal/config"
@@ -34,63 +33,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.resizeViewports()
 		return m, nil
 
 	case backupFinishedMsg:
-		m.isProcessing = false
-		if msg.err != nil {
-			m.message = "Backup failed: " + msg.err.Error()
-			m.isSuccess = false
-		} else {
-			m.message = "Backup finished successfully!"
-			m.isSuccess = true
-			// Refresh history and paths
-			hist, _ := config.GetHistory()
-			m.history = hist
-			paths, _ := config.GetPaths()
-			m.paths = paths
-		}
-		return m, nil
+		return m.handleBackupFinished(msg)
 
 	case restoreFinishedMsg:
-		m.isRestoring = false
-		if msg.err != nil {
-			m.message = "Restore failed: " + msg.err.Error()
-			m.isSuccess = false
-		} else if msg.result != nil {
-			if msg.result.Success {
-				m.message = fmt.Sprintf("Restore successful! Files restored to %s", msg.result.DestinationPath)
-				m.isSuccess = true
-				// Log restore event
-				actionStr := "overwrite"
-				switch msg.result.Action {
-				case restore.RestoreActionRename:
-					actionStr = "rename"
-				case restore.RestoreActionSkip:
-					actionStr = "skip"
-				}
-				config.LogRestore(
-					m.selectedBackup.Filename,
-					m.selectedBackup.SourcePath,
-					msg.result.DestinationPath,
-					actionStr,
-					true,
-					msg.result.Message,
-				)
-			} else {
-				m.message = "Restore incomplete: " + msg.result.Message
-				m.isSuccess = false
-			}
-		}
-		// Refresh backup list and preserve the result message
-		savedMsg := m.message
-		savedSuccess := m.isSuccess
-		m.loadBackups()
-		m.message = savedMsg
-		m.isSuccess = savedSuccess
-		m.state = viewBackupsView
-		m.selectedBackup = nil
-		return m, nil
+		return m.handleRestoreFinished(msg)
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
@@ -130,10 +80,10 @@ func (m Model) View() string {
 
 	var body strings.Builder
 
-	if m.state == menuView {
+	if isMenu(m.state) {
 		m.renderMenu(&body)
 	} else {
-		// Sub-menu View: Mini logo in top-left
+		// Screen: Mini logo in top-left
 		body.WriteString(miniLogoStyle.Render(miniLogo) + "\n")
 
 		switch m.state {
@@ -164,4 +114,61 @@ func (m Model) View() string {
 		lipgloss.Center, lipgloss.Center,
 		containerStyle.Render(body.String()),
 	)
+}
+
+// renderMessage writes the current status message, if any
+func (m Model) renderMessage(body *strings.Builder) {
+	if m.message == "" {
+		return
+	}
+	style := errorStyle
+	if m.isSuccess {
+		style = successStyle
+	}
+	body.WriteString(style.Render(m.message) + "\n")
+}
+
+// resizeViewports fits the scrolling areas to the terminal, leaving room
+// for the logo, the title and the footer
+func (m *Model) resizeViewports() {
+	width := m.width - 8
+	if width > 110 {
+		width = 110
+	}
+	if width < 20 {
+		width = 20
+	}
+	height := m.height - 12
+	if height < 3 {
+		height = 3
+	}
+
+	m.logsView.Width, m.logsView.Height = width, height
+	m.commitsView.Width, m.commitsView.Height = width, height
+}
+
+// reloadPaths refreshes the file backup settings from the config
+func (m *Model) reloadPaths() {
+	m.paths, _ = config.GetPaths()
+	m.history, _ = config.GetHistory()
+	m.backupDest, _ = config.GetNasPath()
+}
+
+// reloadConfigBackup refreshes the config backup settings from the config
+func (m *Model) reloadConfigBackup() {
+	m.configBackup, _ = config.GetConfigBackup()
+	if m.watchesCursor >= len(m.configBackup.Watches) {
+		m.watchesCursor = 0
+	}
+}
+
+// actionLabel returns the name of a restore action as stored in the history
+func actionLabel(action restore.RestoreAction) string {
+	switch action {
+	case restore.RestoreActionRename:
+		return "rename"
+	case restore.RestoreActionSkip:
+		return "skip"
+	}
+	return "overwrite"
 }

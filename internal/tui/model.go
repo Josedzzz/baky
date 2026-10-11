@@ -1,11 +1,12 @@
 package tui
 
 import (
-	"fmt"
-
 	"github.com/Josedzzz/baky/internal/config"
+	"github.com/Josedzzz/baky/internal/gitbackup"
 	"github.com/Josedzzz/baky/internal/restore"
+	"github.com/Josedzzz/baky/internal/service"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 )
 
 // sessionState represents the different states of the TUI
@@ -14,6 +15,15 @@ type sessionState int
 const (
 	// menuView is the state where the user interacts with the main menu
 	menuView sessionState = iota
+
+	// filesMenuView is the submenu of the file backups (tar.gz to the backup destination)
+	filesMenuView
+
+	// configMenuView is the submenu of the versioned backup of configuration files
+	configMenuView
+
+	// serviceMenuView is the submenu of the daemon service
+	serviceMenuView
 
 	// managePathsView is the unified state where the user manages backup paths
 	managePathsView
@@ -41,12 +51,42 @@ const (
 
 	// restoreInputView is a sub-state for when the user is typing a restore path
 	restoreInputView
+
+	// watchesView is the state where the user manages the watched config folders
+	watchesView
+
+	// watchSourceInputView is a sub-state for typing the folder to watch
+	watchSourceInputView
+
+	// watchDestInputView is a sub-state for typing the folder name inside the repository
+	watchDestInputView
+
+	// watchConfirmDeleteView asks for confirmation before a folder stops being watched
+	watchConfirmDeleteView
+
+	// configRepoView is the state where the user configures the config repository
+	configRepoView
+
+	// configRepoInputView is a sub-state for typing the config repository path
+	configRepoInputView
+
+	// configHistoryView shows the config backups already made (commits)
+	configHistoryView
+
+	// serviceStatusView shows the daemon service and lets the user start or stop it
+	serviceStatusView
+
+	// logsView shows the daemon log, refreshed automatically
+	logsView
+
+	// helpView lists the keyboard shortcuts
+	helpView
 )
 
 // Model represents the state of the TUI
 type Model struct {
-	choices         []string
 	cursor          int
+	menuCursors     map[sessionState]int // remembers the selected entry of each menu
 	quitting        bool
 	state           sessionState
 	pathInput       textinput.Model
@@ -74,47 +114,69 @@ type Model struct {
 	restoreAction      restore.RestoreAction
 	restoreActionIndex int // For selecting action (overwrite/rename/skip)
 	isRestoring        bool
+
+	// Config backup fields
+	configBackup  config.ConfigBackup
+	repoValid     bool            // whether the configured repository is a Git repository
+	watchesCursor int             // cursor for the watched folders list
+	watchInput    textinput.Model // Input for the folder to watch and its destination name
+	repoInput     textinput.Model // Input for the config repository path
+	pendingSource string          // folder typed in the first step of adding a watch
+	commits       []gitbackup.Commit
+	commitsErr    string
+	commitsView   viewport.Model
+
+	// Service fields
+	service        service.State
+	serviceKnown   bool // false until the first query answers
+	serviceLoading bool
+	logLines       []string
+	logsErr        string
+	logsView       viewport.Model
 }
 
 // NewModel init and returns a new Model with default values
 func NewModel() Model {
 	ti := textinput.New()
-	ti.Placeholder = "/path/to/backup"
+	ti.Placeholder = "/ruta/a/respaldar"
 
 	di := textinput.New()
-	di.Placeholder = "/path/to/backup/destination"
+	di.Placeholder = "/ruta/del/destino/de/respaldos"
 
 	ri := textinput.New()
-	ri.Placeholder = "/path/to/restore/to"
+	ri.Placeholder = "/ruta/donde/restaurar"
 
-	paths, pathErr := config.GetPaths()
-	if pathErr != nil {
-		fmt.Printf("Warning: Could not load backup paths: %v\n", pathErr)
-		paths = []config.BackupPathConfig{}
-	}
+	wi := textinput.New()
+	wi.Placeholder = "/etc/openvpn"
 
-	backupDest, destErr := config.GetNasPath()
-	if destErr != nil {
-		fmt.Printf("Warning: Could not load NAS path: %v\n", destErr)
-		backupDest = ""
-	}
+	pi := textinput.New()
+	pi.Placeholder = "/ruta/al/repositorio/de/configuraciones"
 
-	history, histErr := config.GetHistory()
-	if histErr != nil {
-		fmt.Printf("Warning: Could not load backup history: %v\n", histErr)
-		history = []config.BackupEvent{}
-	}
+	// A config that cannot be read shows as empty; config.Warning() explains why
+	paths, _ := config.GetPaths()
+	backupDest, _ := config.GetNasPath()
+	history, _ := config.GetHistory()
+	configBackup, _ := config.GetConfigBackup()
 
-	return Model{
-		choices:         []string{"Manage Paths", "Backup Files", "View Backups", "Backup Destination", "Exit"},
+	m := Model{
+		menuCursors:     map[sessionState]int{},
 		pathInput:       ti,
 		backupDestInput: di,
 		restoreInput:    ri,
+		watchInput:      wi,
+		repoInput:       pi,
 		state:           menuView,
 		editingIndex:    -1,
 		paths:           paths,
 		backupDest:      backupDest,
 		history:         history,
 		allBackups:      []restore.BackupInfo{},
+		configBackup:    configBackup,
+		commitsView:     viewport.New(0, 0),
+		logsView:        viewport.New(0, 0),
 	}
+	if warning := config.Warning(); warning != "" {
+		m.message = "Aviso: " + warning
+	}
+	return m
 }
