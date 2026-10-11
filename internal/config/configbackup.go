@@ -1,5 +1,11 @@
 package config
 
+import (
+	"fmt"
+	"path/filepath"
+	"regexp"
+)
+
 // DefaultBranch is the branch config backups are pushed to when none is set
 const DefaultBranch = "main"
 
@@ -15,4 +21,83 @@ type ConfigBackup struct {
 	RepoDir string        `json:"repo_dir"`
 	Branch  string        `json:"branch"`
 	Watches []WatchConfig `json:"watches"`
+}
+
+// destNamePattern keeps destination folders to one safe path element
+var destNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$`)
+
+// ValidateDestName checks that name can be used as a folder inside the
+// repository: one path element, no separators, nothing that escapes the repo
+func ValidateDestName(name string) error {
+	if name == "" {
+		return fmt.Errorf("el nombre no puede estar vacío")
+	}
+	if name == ".git" || !destNamePattern.MatchString(name) {
+		return fmt.Errorf("solo se permiten letras, números, '.', '-' y '_' (máx. 50 caracteres, debe empezar con letra o número)")
+	}
+	return nil
+}
+
+// GetConfigBackup returns the config backup settings
+func GetConfigBackup() (ConfigBackup, error) {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return ConfigBackup{}, err
+	}
+	cb := cfg.ConfigBackup
+	if cb.Branch == "" {
+		cb.Branch = DefaultBranch
+	}
+	return cb, nil
+}
+
+// SaveConfigRepo sets the repository that receives the config backups
+func SaveConfigRepo(repoDir string) error {
+	if !filepath.IsAbs(repoDir) {
+		return fmt.Errorf("la ruta del repositorio debe ser absoluta: %s", repoDir)
+	}
+	return update(func(cfg *Config) error {
+		cfg.ConfigBackup.RepoDir = filepath.Clean(repoDir)
+		if cfg.ConfigBackup.Branch == "" {
+			cfg.ConfigBackup.Branch = DefaultBranch
+		}
+		return nil
+	})
+}
+
+// AddWatch starts watching source and maps it to the dest folder of the repository
+func AddWatch(source, dest string) error {
+	if !filepath.IsAbs(source) {
+		return fmt.Errorf("la ruta a vigilar debe ser absoluta: %s", source)
+	}
+	source = filepath.Clean(source)
+	if err := ValidateDestName(dest); err != nil {
+		return err
+	}
+
+	return update(func(cfg *Config) error {
+		for _, w := range cfg.ConfigBackup.Watches {
+			if w.Source == source {
+				return fmt.Errorf("la carpeta '%s' ya está siendo vigilada", source)
+			}
+			if w.Dest == dest {
+				return fmt.Errorf("el destino '%s' ya está en uso por '%s'", dest, w.Source)
+			}
+		}
+		cfg.ConfigBackup.Watches = append(cfg.ConfigBackup.Watches, WatchConfig{Source: source, Dest: dest})
+		return nil
+	})
+}
+
+// RemoveWatch stops watching source. Files already in the repository are kept.
+func RemoveWatch(source string) error {
+	return update(func(cfg *Config) error {
+		for i, w := range cfg.ConfigBackup.Watches {
+			if w.Source == source {
+				cfg.ConfigBackup.Watches = append(cfg.ConfigBackup.Watches[:i], cfg.ConfigBackup.Watches[i+1:]...)
+				return nil
+			}
+		}
+		return fmt.Errorf("la carpeta '%s' no está siendo vigilada", source)
+	})
 }

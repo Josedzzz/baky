@@ -185,3 +185,51 @@ func TestCorruptConfigIsSetAside(t *testing.T) {
 		t.Errorf("the corrupt file must be kept for recovery: %v", err)
 	}
 }
+
+func TestConfigBackupWatches(t *testing.T) {
+	useTempConfig(t)
+
+	if err := SaveConfigRepo("relative/repo"); err == nil {
+		t.Errorf("expected an error for a relative repository path")
+	}
+	if err := SaveConfigRepo("/var/lib/baky/config-repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := AddWatch("/etc/openvpn/", "vpn"); err != nil {
+		t.Fatal(err)
+	}
+	for name, add := range map[string][2]string{
+		"relative source":  {"etc/iptables", "firewall"},
+		"duplicate source": {"/etc/openvpn", "vpn2"},
+		"duplicate dest":   {"/etc/wireguard", "vpn"},
+		"dest with slash":  {"/etc/iptables", "fire/wall"},
+		"dest escaping":    {"/etc/iptables", ".."},
+		"dest .git":        {"/etc/iptables", ".git"},
+	} {
+		if err := AddWatch(add[0], add[1]); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+
+	cb, err := GetConfigBackup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cb.RepoDir != "/var/lib/baky/config-repo" || cb.Branch != DefaultBranch {
+		t.Errorf("unexpected repo settings: %+v", cb)
+	}
+	if len(cb.Watches) != 1 || cb.Watches[0] != (WatchConfig{Source: "/etc/openvpn", Dest: "vpn"}) {
+		t.Errorf("unexpected watches: %+v", cb.Watches)
+	}
+
+	if err := RemoveWatch("/etc/openvpn"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveWatch("/etc/openvpn"); err == nil {
+		t.Errorf("expected an error removing a watch that does not exist")
+	}
+	if cb, _ := GetConfigBackup(); len(cb.Watches) != 0 {
+		t.Errorf("expected no watches, got %+v", cb.Watches)
+	}
+}
