@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Josedzzz/baky/internal/logging"
 	"github.com/Josedzzz/baky/internal/watch"
 	"github.com/fsnotify/fsnotify"
 )
@@ -18,11 +19,6 @@ import (
 const (
 	// commitPrefix starts the message of every automatic commit
 	commitPrefix = "auto-backup"
-
-	// Log levels, as written in the daemon log
-	LevelInfo  = "INFO"
-	LevelWarn  = "WARN"
-	LevelError = "ERROR"
 
 	defaultDebounce       = 2 * time.Second
 	defaultResyncInterval = 10 * time.Minute
@@ -41,7 +37,7 @@ type Options struct {
 	Watches []Watch // Directories to back up
 
 	// Log receives every event worth recording. Optional.
-	Log func(level, message string)
+	Log logging.Func
 
 	// Debounce is how long to wait after the last change before backing
 	// up, so a burst of writes becomes one backup. Defaults to 2 seconds.
@@ -125,18 +121,18 @@ func (b *Backuper) syncWatch(w Watch) int {
 	defer b.mu.Unlock()
 
 	dest := filepath.Join(b.opts.RepoDir, w.Dest)
-	warn := func(msg string) { b.logf(LevelWarn, "%s", msg) }
+	warn := func(msg string) { b.logf(logging.Warn, "%s", msg) }
 
 	if err := mirror(w.Source, dest, warn); err != nil {
 		// The backup already in the repository is left untouched: a folder
 		// that is missing or unreadable must not erase its own history.
-		b.logf(LevelError, "Carpeta vigilada no accesible, se omite: %s (%v)", w.Source, err)
+		b.logf(logging.Error, "Carpeta vigilada no accesible, se omite: %s (%v)", w.Source, err)
 		return 0
 	}
 
 	changes, err := pendingChanges(b.opts.RepoDir, w.Dest)
 	if err != nil {
-		b.logf(LevelError, "No se pudo consultar el estado de %s: %v", w.Dest, err)
+		b.logf(logging.Error, "No se pudo consultar el estado de %s: %v", w.Dest, err)
 		return 0
 	}
 
@@ -149,10 +145,10 @@ func (b *Backuper) syncWatch(w Watch) int {
 		message := fmt.Sprintf("%s: %s (%s)", commitPrefix, description, b.now().Format("2006-01-02 15:04:05"))
 
 		if err := commitPath(b.opts.RepoDir, c.path, message); err != nil {
-			b.logf(LevelError, "Fallo al hacer commit de %s: %v", c.path, err)
+			b.logf(logging.Error, "Fallo al hacer commit de %s: %v", c.path, err)
 			continue
 		}
-		b.logf(LevelInfo, "Commit realizado: %s -> %s.", description, c.path)
+		b.logf(logging.Info, "Commit realizado: %s -> %s.", description, c.path)
 		commits++
 	}
 
@@ -171,17 +167,17 @@ func (b *Backuper) Push() bool {
 	}
 	if !hasRemote(b.opts.RepoDir) {
 		if !b.warnedNoRemote {
-			b.logf(LevelWarn, "El repositorio no tiene remoto 'origin'; los commits quedan solo en local.")
+			b.logf(logging.Warn, "El repositorio no tiene remoto 'origin'; los commits quedan solo en local.")
 			b.warnedNoRemote = true
 		}
 		return false
 	}
 
 	if err := push(b.opts.RepoDir, b.opts.Branch); err != nil {
-		b.logf(LevelError, "Fallo al hacer push. Commits locales guardados, pendiente de reintento: %v", err)
+		b.logf(logging.Error, "Fallo al hacer push. Commits locales guardados, pendiente de reintento: %v", err)
 		return false
 	}
-	b.logf(LevelInfo, "Push exitoso.")
+	b.logf(logging.Info, "Push exitoso.")
 	return true
 }
 
@@ -262,7 +258,7 @@ func (b *Backuper) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			b.logf(LevelError, "Error del vigilante de archivos: %v", err)
+			b.logf(logging.Error, "Error del vigilante de archivos: %v", err)
 		}
 	}
 }
