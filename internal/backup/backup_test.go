@@ -148,20 +148,3 @@ func TestCreateTarGzSymlink(t *testing.T) {
 		t.Errorf("Expected symlink to real.txt, got type %c to %q", link.Typeflag, link.Linkname)
 	}
 }
-
-func TestIsWithin(t *testing.T) {
-	cases := []struct {
-		name, root string
-		want       bool
-	}{
-		{"/etc/nginx", "/etc/nginx", true},
-		{"/etc/nginx/conf.d/a.conf", "/etc/nginx", true},
-		{"/etc/nginx2/a.conf", "/etc/nginx", false},
-		{"/etc/nginx.conf.bak", "/etc/nginx.conf", false},
-	}
-	for _, c := range cases {
-		if got := isWithin(c.name, c.root); got != c.want {
-			t.Errorf("isWithin(%q, %q) = %v, expected %v", c.name, c.root, got, c.want)
-		}
-	}
-}

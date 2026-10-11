@@ -8,11 +8,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/Josedzzz/baky/internal/config"
+	"github.com/Josedzzz/baky/internal/watch"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -163,13 +163,9 @@ func StartWatcher() error {
 						continue
 					}
 					for _, p := range paths {
-						if p.Frequency == config.FreqOnChange && isWithin(event.Name, p.Path) {
+						if p.Frequency == config.FreqOnChange && watch.IsWithin(event.Name, p.Path) {
 							// Directories created after startup must be watched too
-							if event.Op&fsnotify.Create != 0 {
-								if info, statErr := os.Stat(event.Name); statErr == nil && info.IsDir() {
-									addRecursive(w, event.Name)
-								}
-							}
+							watch.AddIfNewDir(w, event)
 							// Debounce 5 seconds
 							if t, ok := timers[p.Path]; ok {
 								t.Stop()
@@ -216,7 +212,7 @@ func UpdateWatcher() error {
 	watchedPaths.Range(func(key, value any) bool {
 		path := key.(string)
 		if !currentPathsToWatch[path] {
-			removeRecursive(watcher, path)
+			watch.RemoveRecursive(watcher, path)
 			watchedPaths.Delete(path)
 		}
 		return true
@@ -226,48 +222,11 @@ func UpdateWatcher() error {
 	// (Add is idempotent): a removal above may have dropped a directory
 	// that another configured path still needs.
 	for path := range currentPathsToWatch {
-		addRecursive(watcher, path)
+		watch.AddRecursive(watcher, path)
 		watchedPaths.Store(path, struct{}{})
 	}
 
 	return nil
-}
-
-// isWithin reports whether name is root itself or lives somewhere under it
-func isWithin(name, root string) bool {
-	root = filepath.Clean(root)
-	return name == root || strings.HasPrefix(name, root+string(filepath.Separator))
-}
-
-func addRecursive(w *fsnotify.Watcher, path string) {
-	// A single file is watched through its parent directory, so the watch
-	// survives editors that replace the file instead of writing in place.
-	if info, err := os.Stat(path); err == nil && !info.IsDir() {
-		w.Add(filepath.Dir(path))
-		return
-	}
-
-	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			w.Add(p)
-		}
-		return nil
-	})
-}
-
-func removeRecursive(w *fsnotify.Watcher, path string) {
-	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			w.Remove(p)
-		}
-		return nil
-	})
 }
 
 // StartScheduler initiates a goroutine for daily and weekly backups at 3 AM
