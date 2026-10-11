@@ -103,6 +103,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleServiceStatusUpdate(msg)
 		case logsView:
 			return m.handleLogsUpdate(msg)
+		case helpView:
+			return m.handleHelpUpdate(msg)
 		default:
 			return m.handleMenuUpdate(msg)
 		}
@@ -159,6 +161,8 @@ func (m Model) View() string {
 			m.renderServiceStatus(&body)
 		case logsView:
 			m.renderLogs(&body)
+		case helpView:
+			m.renderHelp(&body)
 		}
 	}
 

@@ -30,6 +30,7 @@ var menus = map[sessionState]menu{
 			{"Respaldo de archivos", filesMenuView},
 			{"Respaldo de configuraciones", configMenuView},
 			{"Servicio", serviceMenuView},
+			{"Ayuda", helpView},
 			{"Salir", quitEntry},
 		},
 	},
@@ -86,6 +87,9 @@ func (m Model) handleMenuUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.menuCursors[m.state] = m.cursor
 		return m.open(target)
+	case "?":
+		m.menuCursors[m.state] = m.cursor
+		return m.open(helpView)
 	case "esc":
 		if m.state != menuView {
 			return m.back(menuView)
@@ -175,7 +179,7 @@ func (m Model) renderMenu(body *strings.Builder) {
 	}
 
 	if m.state == menuView {
-		body.WriteString(footerStyle.Render("\n↑/↓: navegar • enter: seleccionar • q: salir"))
+		body.WriteString(footerStyle.Render("\n↑/↓: navegar • enter: seleccionar • ?: ayuda • q: salir"))
 	} else {
 		body.WriteString(footerStyle.Render("\n↑/↓: navegar • enter: seleccionar • esc: volver • q: salir"))
 	}
