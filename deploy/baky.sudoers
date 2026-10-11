@@ -1,0 +1,9 @@
+# Permite al usuario de la TUI iniciar, detener y reiniciar el servicio
+# de baky sin contraseña. Consultar el estado no necesita sudo.
+#
+# Instalar con:
+#   sudo install -m 0440 deploy/baky.sudoers /etc/sudoers.d/baky
+#   sudo visudo -cf /etc/sudoers.d/baky
+#
+# Reemplazar CAMBIAR_USUARIO por el usuario que usa la TUI.
+CAMBIAR_USUARIO ALL=(root) NOPASSWD: /usr/bin/systemctl start baky.service, /usr/bin/systemctl stop baky.service, /usr/bin/systemctl restart baky.service

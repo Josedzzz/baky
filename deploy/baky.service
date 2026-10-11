@@ -1,0 +1,19 @@
+[Unit]
+Description=baky - respaldo automatico de archivos y configuraciones
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Usuario que ejecuta el daemon. Debe ser el mismo que usa la TUI, para que
+# ambos lean el mismo archivo de configuracion (~/.config/baky/config.json),
+# y debe poder leer las carpetas vigiladas.
+User=CAMBIAR_USUARIO
+ExecStart=/usr/local/bin/baky daemon
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
