@@ -150,17 +150,33 @@ func init() {
 
 // Path returns the location of the config file
 func Path() string {
+	configLock.Lock()
+	defer configLock.Unlock()
 	return configPath
+}
+
+// SetPath changes the location of the config file. The state and log
+// files live in the same directory.
+func SetPath(path string) {
+	configLock.Lock()
+	defer configLock.Unlock()
+	configPath = path
+	loadWarning = ""
 }
 
 // StatePath returns the location of the state file
 func StatePath() string {
-	return filepath.Join(filepath.Dir(configPath), StateFile)
+	return filepath.Join(filepath.Dir(Path()), StateFile)
 }
 
 // LogPath returns the location of the daemon log file
 func LogPath() string {
-	return filepath.Join(filepath.Dir(configPath), LogFile)
+	return filepath.Join(filepath.Dir(Path()), LogFile)
+}
+
+// statePath is StatePath for callers that already hold configLock
+func statePath() string {
+	return filepath.Join(filepath.Dir(configPath), StateFile)
 }
 
 // Warning returns a message when the config file could not be read and
@@ -205,9 +221,9 @@ func load() (*Config, error) {
 	cfg.RestoreHistory = append(cfg.RestoreHistory, settings.RestoreHistory...)
 
 	// The state file, when present, replaces the legacy values read above
-	if _, err := os.Stat(StatePath()); err == nil {
+	if _, err := os.Stat(statePath()); err == nil {
 		var state stateFile
-		if err := readJSON(StatePath(), &state); err != nil {
+		if err := readJSON(statePath(), &state); err != nil {
 			return nil, err
 		}
 		cfg.History = append([]BackupEvent{}, state.History...)
@@ -287,7 +303,7 @@ func save(cfg *Config) error {
 
 	// The state goes first: if the config file still carries legacy history,
 	// it must be safely stored before the config is rewritten without it.
-	if err := writeJSON(StatePath(), state); err != nil {
+	if err := writeJSON(statePath(), state); err != nil {
 		return err
 	}
 	return writeJSON(configPath, settings)

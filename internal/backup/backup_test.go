@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/Josedzzz/baky/internal/config"
 )
 
 func TestCreateTarGz(t *testing.T) {
@@ -146,5 +149,34 @@ func TestCreateTarGzSymlink(t *testing.T) {
 	}
 	if link.Typeflag != tar.TypeSymlink || link.Linkname != "real.txt" {
 		t.Errorf("Expected symlink to real.txt, got type %c to %q", link.Typeflag, link.Linkname)
+	}
+}
+
+func TestScheduledDue(t *testing.T) {
+	// 2026-10-11 is a Sunday
+	sunday3am := time.Date(2026, 10, 11, 3, 10, 0, 0, time.Local)
+	monday3am := sunday3am.Add(24 * time.Hour)
+
+	cases := []struct {
+		name      string
+		frequency string
+		last      time.Time
+		now       time.Time
+		want      bool
+	}{
+		{"daily never backed up", config.FreqDaily, time.Time{}, sunday3am, true},
+		{"daily backed up yesterday", config.FreqDaily, sunday3am.Add(-24 * time.Hour), sunday3am, true},
+		{"daily already done this hour", config.FreqDaily, sunday3am.Add(-5 * time.Minute), sunday3am, false},
+		{"daily outside the 3 AM hour", config.FreqDaily, time.Time{}, sunday3am.Add(2 * time.Hour), false},
+		{"weekly on sunday", config.FreqWeekly, sunday3am.Add(-7 * 24 * time.Hour), sunday3am, true},
+		{"weekly on monday", config.FreqWeekly, time.Time{}, monday3am, false},
+		{"weekly already done", config.FreqWeekly, sunday3am.Add(-5 * time.Minute), sunday3am, false},
+		{"on_change is not scheduled", config.FreqOnChange, time.Time{}, sunday3am, false},
+	}
+	for _, c := range cases {
+		p := config.BackupPathConfig{Path: "/x", Frequency: c.frequency, LastBackup: c.last}
+		if got := scheduledDue(p, c.now); got != c.want {
+			t.Errorf("%s: expected %v, got %v", c.name, c.want, got)
+		}
 	}
 }

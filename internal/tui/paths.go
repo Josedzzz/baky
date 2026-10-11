@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Josedzzz/baky/internal/backup"
 	"github.com/Josedzzz/baky/internal/config"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -47,7 +46,6 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				p.Frequency = config.FreqDaily
 			}
 			config.SavePaths(m.paths)
-			backup.UpdateWatcher()
 		}
 	case "d":
 		if len(m.paths) > 0 {
@@ -56,7 +54,6 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.pathsCursor--
 			}
 			config.SavePaths(m.paths)
-			backup.UpdateWatcher()
 			m.message = "Path deleted"
 			m.isSuccess = true
 		}
@@ -87,7 +84,6 @@ func (m Model) handleInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.message = "Path updated"
 			}
 			config.SavePaths(m.paths)
-			backup.UpdateWatcher()
 			m.isSuccess = true
 			m.state = managePathsView
 			m.pathInput.Reset()

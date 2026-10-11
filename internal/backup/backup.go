@@ -4,6 +4,7 @@ package backup
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Josedzzz/baky/internal/config"
+	"github.com/Josedzzz/baky/internal/logging"
 	"github.com/Josedzzz/baky/internal/watch"
 	"github.com/fsnotify/fsnotify"
 )
@@ -42,13 +44,10 @@ func RunBackup(sourcePath string) error {
 	if err != nil {
 		msg = err.Error()
 		// Clean up incomplete backup file on failure
-		if rmErr := os.Remove(destPath); rmErr != nil {
-			fmt.Printf("Warning: Could not clean up failed backup: %v\n", rmErr)
-		}
+		os.Remove(destPath)
 	}
-	logErr := config.LogBackup(sourcePath, err == nil, msg)
-	if logErr != nil {
-		fmt.Printf("Error logging backup: %v\n", logErr)
+	if logErr := config.LogBackup(sourcePath, err == nil, msg); logErr != nil && err == nil {
+		return fmt.Errorf("backup created, but the history could not be updated: %w", logErr)
 	}
 
 	return err
@@ -125,74 +124,23 @@ func createTarGz(src, dest string) (err error) {
 	})
 }
 
+// Debounce is how long Run waits after the last change before backing up
+// an "on_change" path, so a burst of writes becomes one backup
+var Debounce = 5 * time.Second
+
+// lastAttempt remembers when the scheduler last tried each path, so a
+// backup that keeps failing is not retried every minute
 var (
-	watcher      *fsnotify.Watcher
-	watchedPaths sync.Map // map[string]struct{}
+	lastAttempt   = make(map[string]time.Time)
+	lastAttemptMu sync.Mutex
 )
 
-// StartWatcher initiates a goroutine to monitor path changes for "on_change" frequency
-func StartWatcher() error {
-	if watcher != nil {
-		watcher.Close()
-	}
-
-	var err error
-	watcher, err = fsnotify.NewWatcher()
-	if err != nil {
-		return err
-	}
-
-	w := watcher
-	go func() {
-		defer w.Close()
-		// debounce timers map
-		timers := make(map[string]*time.Timer)
-
-		for {
-			select {
-			case event, ok := <-w.Events:
-				if !ok {
-					return
-				}
-				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
-					// Find which backup path this event belongs to
-					// Take snapshot of paths to avoid race condition with config updates
-					paths, pathErr := config.GetPaths()
-					if pathErr != nil {
-						fmt.Printf("Error getting paths: %v\n", pathErr)
-						continue
-					}
-					for _, p := range paths {
-						if p.Frequency == config.FreqOnChange && watch.IsWithin(event.Name, p.Path) {
-							// Directories created after startup must be watched too
-							watch.AddIfNewDir(w, event)
-							// Debounce 5 seconds
-							if t, ok := timers[p.Path]; ok {
-								t.Stop()
-							}
-							timers[p.Path] = time.AfterFunc(5*time.Second, func() {
-								fmt.Printf("OnChange backup triggered for: %s\n", p.Path)
-								RunBackup(p.Path)
-							})
-						}
-					}
-				}
-			case err, ok := <-w.Errors:
-				if !ok {
-					return
-				}
-				fmt.Printf("Watcher error: %v\n", err)
-			}
-		}
-	}()
-
-	return UpdateWatcher()
-}
-
-// UpdateWatcher refreshes the list of watched paths based on current config
-func UpdateWatcher() error {
-	if watcher == nil {
-		return nil
+// Run executes the automatic backups until ctx is cancelled: "on_change"
+// paths are backed up when their files change, "daily" and "weekly" paths
+// at 3 AM. The paths are read once; call Run again after a config change.
+func Run(ctx context.Context, logf logging.Func) error {
+	if logf == nil {
+		logf = func(level, message string) {}
 	}
 
 	paths, err := config.GetPaths()
@@ -200,75 +148,118 @@ func UpdateWatcher() error {
 		return err
 	}
 
-	// Paths that should be watched now
-	currentPathsToWatch := make(map[string]bool)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	defer watcher.Close()
+
+	var onChange []string
 	for _, p := range paths {
 		if p.Frequency == config.FreqOnChange {
-			currentPathsToWatch[p.Path] = true
+			onChange = append(onChange, p.Path)
+			watch.AddRecursive(watcher, p.Path)
 		}
 	}
 
-	// Remove paths that are no longer watched
-	watchedPaths.Range(func(key, value any) bool {
-		path := key.(string)
-		if !currentPathsToWatch[path] {
-			watch.RemoveRecursive(watcher, path)
-			watchedPaths.Delete(path)
-		}
-		return true
-	})
-
-	// Add paths to watch. Paths already watched are re-added on purpose
-	// (Add is idempotent): a removal above may have dropped a directory
-	// that another configured path still needs.
-	for path := range currentPathsToWatch {
-		watch.AddRecursive(watcher, path)
-		watchedPaths.Store(path, struct{}{})
-	}
-
-	return nil
-}
-
-// StartScheduler initiates a goroutine for daily and weekly backups at 3 AM
-func StartScheduler() {
-	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		lastDailyRun := make(map[string]time.Time)
-		lastWeeklyRun := make(map[string]time.Time)
-
-		for range ticker.C {
-			now := time.Now()
-			paths, pathErr := config.GetPaths()
-			if pathErr != nil {
-				fmt.Printf("Error getting paths for scheduler: %v\n", pathErr)
-				continue
-			}
-
-			for _, p := range paths {
-				switch p.Frequency {
-				case config.FreqDaily:
-					last, ok := lastDailyRun[p.Path]
-					if !ok {
-						last = time.Time{}
-					}
-					if now.Hour() == 3 && (last.IsZero() || now.Sub(last) > 24*time.Hour) {
-						fmt.Printf("Daily backup triggered for: %s\n", p.Path)
-						RunBackup(p.Path)
-						lastDailyRun[p.Path] = now
-					}
-				case config.FreqWeekly:
-					last, ok := lastWeeklyRun[p.Path]
-					if !ok {
-						last = time.Time{}
-					}
-					if now.Weekday() == time.Sunday && now.Hour() == 3 && (last.IsZero() || now.Sub(last) > 24*7*time.Hour) {
-						fmt.Printf("Weekly backup triggered for: %s\n", p.Path)
-						RunBackup(p.Path)
-						lastWeeklyRun[p.Path] = now
-					}
-				}
-			}
+	due := make(chan string, len(paths)+1)
+	timers := make(map[string]*time.Timer)
+	defer func() {
+		for _, t := range timers {
+			t.Stop()
 		}
 	}()
+
+	backup := func(path, reason string) {
+		logf(logging.Info, fmt.Sprintf("Respaldo %s iniciado: %s", reason, path))
+		if err := RunBackup(path); err != nil {
+			logf(logging.Error, fmt.Sprintf("Respaldo fallido: %s (%v)", path, err))
+			return
+		}
+		logf(logging.Info, fmt.Sprintf("Respaldo completado: %s", path))
+	}
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return nil
+			}
+			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
+				continue
+			}
+			for _, path := range onChange {
+				if !watch.IsWithin(event.Name, path) {
+					continue
+				}
+				// Directories created after startup must be watched too
+				watch.AddIfNewDir(watcher, event)
+
+				// Debounce: restart the countdown on every new change
+				if t, ok := timers[path]; ok {
+					t.Stop()
+				}
+				timers[path] = time.AfterFunc(Debounce, func() {
+					select {
+					case due <- path:
+					default: // a backup is already queued
+					}
+				})
+			}
+
+		case path := <-due:
+			backup(path, "por cambio")
+
+		case now := <-ticker.C:
+			// Read the paths again: the last backup times change over time
+			current, err := config.GetPaths()
+			if err != nil {
+				logf(logging.Error, fmt.Sprintf("No se pudo leer la configuración: %v", err))
+				continue
+			}
+			for _, p := range current {
+				if !scheduledDue(p, now) {
+					continue
+				}
+				lastAttemptMu.Lock()
+				recent := now.Sub(lastAttempt[p.Path]) < time.Hour
+				lastAttempt[p.Path] = now
+				lastAttemptMu.Unlock()
+				if recent {
+					continue
+				}
+				backup(p.Path, "programado")
+			}
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return nil
+			}
+			logf(logging.Error, fmt.Sprintf("Error del vigilante de archivos: %v", err))
+		}
+	}
+}
+
+// scheduledDue reports whether a daily or weekly path must be backed up
+// at the given time. Backups run during the 3 AM hour, and the recorded
+// time of the last successful backup keeps them from running twice.
+func scheduledDue(p config.BackupPathConfig, now time.Time) bool {
+	if now.Hour() != 3 {
+		return false
+	}
+	sinceLast := now.Sub(p.LastBackup)
+
+	switch p.Frequency {
+	case config.FreqDaily:
+		return sinceLast > 20*time.Hour
+	case config.FreqWeekly:
+		return now.Weekday() == time.Sunday && sinceLast > 6*24*time.Hour
+	}
+	return false
 }
