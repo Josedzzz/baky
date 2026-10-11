@@ -19,7 +19,7 @@ func TestCreateTarGz(t *testing.T) {
 
 	// Create some files
 	files := map[string]string{
-		"file1.txt": "content 1",
+		"file1.txt":      "content 1",
 		"dir1/file2.txt": "content 2",
 	}
 	for path, content := range files {
@@ -70,11 +70,81 @@ func TestCreateTarGz(t *testing.T) {
 
 	// The tar should contain the files with relative paths from the source directory
 	// After the fix, filepath.Rel(src, path) is used, so files are at the root of the tar
-	
+
 	if !foundFiles["file1.txt"] {
 		t.Errorf("Expected file1.txt in tar, not found. Found: %v", foundFiles)
 	}
 	if !foundFiles["dir1/file2.txt"] {
 		t.Errorf("Expected dir1/file2.txt in tar, not found. Found: %v", foundFiles)
+	}
+}
+
+// readHeaders returns the headers of a tar.gz file indexed by entry name
+func readHeaders(t *testing.T, path string) map[string]*tar.Header {
+	t.Helper()
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gr.Close()
+
+	headers := make(map[string]*tar.Header)
+	tr := tar.NewReader(gr)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		headers[header.Name] = header
+	}
+	return headers
+}
+
+func TestCreateTarGzSingleFile(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "nginx.conf")
+	os.WriteFile(src, []byte("content"), 0o644)
+	destPath := filepath.Join(tmp, "backup.tar.gz")
+
+	if err := createTarGz(src, destPath); err != nil {
+		t.Fatalf("createTarGz failed: %v", err)
+	}
+
+	headers := readHeaders(t, destPath)
+	if len(headers) != 1 || headers["nginx.conf"] == nil {
+		t.Errorf("Expected a single entry named nginx.conf, found: %v", headers)
+	}
+}
+
+func TestCreateTarGzSymlink(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "src")
+	os.MkdirAll(src, 0o755)
+	os.WriteFile(filepath.Join(src, "real.txt"), []byte("content"), 0o644)
+	if err := os.Symlink("real.txt", filepath.Join(src, "link")); err != nil {
+		t.Skipf("symlinks not supported: %v", err)
+	}
+	destPath := filepath.Join(tmp, "backup.tar.gz")
+
+	if err := createTarGz(src, destPath); err != nil {
+		t.Fatalf("createTarGz failed: %v", err)
+	}
+
+	link := readHeaders(t, destPath)["link"]
+	if link == nil {
+		t.Fatal("Expected link in tar, not found")
+	}
+	if link.Typeflag != tar.TypeSymlink || link.Linkname != "real.txt" {
+		t.Errorf("Expected symlink to real.txt, got type %c to %q", link.Typeflag, link.Linkname)
 	}
 }

@@ -54,18 +54,23 @@ func RunBackup(sourcePath string) error {
 	return err
 }
 
-func createTarGz(src, dest string) error {
+func createTarGz(src, dest string) (err error) {
 	out, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-
 	gw := gzip.NewWriter(out)
-	defer gw.Close()
-
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
+
+	// Data is only fully flushed on Close, so a failed Close means a
+	// truncated archive and must be reported as a backup failure.
+	defer func() {
+		for _, c := range []io.Closer{tw, gw, out} {
+			if cerr := c.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
+	}()
 
 	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -77,7 +82,15 @@ func createTarGz(src, dest string) error {
 			return err
 		}
 
-		header, err := tar.FileInfoHeader(info, info.Name())
+		// Symlinks are stored with their real target, not followed
+		link := ""
+		if info.Mode()&os.ModeSymlink != 0 {
+			if link, err = os.Readlink(path); err != nil {
+				return err
+			}
+		}
+
+		header, err := tar.FileInfoHeader(info, link)
 		if err != nil {
 			return err
 		}
@@ -86,14 +99,18 @@ func createTarGz(src, dest string) error {
 		if err != nil {
 			return err
 		}
-		header.Name = rel
+		// When the source is a single file, rel is "." which is not a
+		// usable entry name: store the file under its own name instead.
+		if rel == "." && !d.IsDir() {
+			rel = filepath.Base(src)
+		}
+		header.Name = filepath.ToSlash(rel)
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
 
-		switch {
-		case !d.Type().IsRegular():
+		if !d.Type().IsRegular() {
 			return nil
 		}
 
