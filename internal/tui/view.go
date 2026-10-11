@@ -42,6 +42,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case restoreFinishedMsg:
 		return m.handleRestoreFinished(msg)
 
+	case commitsLoadedMsg:
+		return m.handleCommitsLoaded(msg)
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -65,6 +68,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleSelectRestoreActionUpdate(msg)
 		case restoreInputView:
 			return m.handleRestoreInputUpdate(msg)
+		case watchesView:
+			return m.handleWatchesUpdate(msg)
+		case watchSourceInputView:
+			return m.handleWatchSourceInputUpdate(msg)
+		case watchDestInputView:
+			return m.handleWatchDestInputUpdate(msg)
+		case watchConfirmDeleteView:
+			return m.handleWatchConfirmDeleteUpdate(msg)
+		case configRepoView:
+			return m.handleConfigRepoUpdate(msg)
+		case configRepoInputView:
+			return m.handleConfigRepoInputUpdate(msg)
+		case configHistoryView:
+			return m.handleConfigHistoryUpdate(msg)
 		default:
 			return m.handleMenuUpdate(msg)
 		}
@@ -105,6 +122,18 @@ func (m Model) View() string {
 			m.renderRestoreInput(&body)
 		case selectRestoreActionView:
 			m.renderSelectRestoreAction(&body)
+		case watchesView:
+			m.renderWatches(&body)
+		case watchSourceInputView, watchDestInputView:
+			m.renderWatchInput(&body)
+		case watchConfirmDeleteView:
+			m.renderWatchConfirmDelete(&body)
+		case configRepoView:
+			m.renderConfigRepo(&body)
+		case configRepoInputView:
+			m.renderConfigRepoInput(&body)
+		case configHistoryView:
+			m.renderConfigHistory(&body)
 		}
 	}
 

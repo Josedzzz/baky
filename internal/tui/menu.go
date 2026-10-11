@@ -28,6 +28,7 @@ var menus = map[sessionState]menu{
 		title: " MENÚ PRINCIPAL ",
 		entries: []menuEntry{
 			{"Respaldo de archivos", filesMenuView},
+			{"Respaldo de configuraciones", configMenuView},
 			{"Salir", quitEntry},
 		},
 	},
@@ -38,6 +39,14 @@ var menus = map[sessionState]menu{
 			{"Respaldar ahora", backupFilesView},
 			{"Ver respaldos / Restaurar", viewBackupsView},
 			{"Destino de respaldo", configureBackupDestView},
+		},
+	},
+	configMenuView: {
+		title: " RESPALDO DE CONFIGURACIONES ",
+		entries: []menuEntry{
+			{"Carpetas vigiladas", watchesView},
+			{"Historial de cambios", configHistoryView},
+			{"Repositorio", configRepoView},
 		},
 	},
 }
@@ -94,7 +103,7 @@ func (m Model) open(target sessionState) (tea.Model, tea.Cmd) {
 	m.message = ""
 
 	switch target {
-	case filesMenuView:
+	case filesMenuView, configMenuView:
 		m.cursor = m.menuCursors[target]
 	case managePathsView:
 		m.reloadPaths()
@@ -109,6 +118,14 @@ func (m Model) open(target sessionState) (tea.Model, tea.Cmd) {
 		m.backupsOffset = 0
 	case configureBackupDestView:
 		m.reloadPaths()
+	case watchesView:
+		m.reloadConfigBackup()
+		m.watchesCursor = 0
+	case configRepoView:
+		m.reloadConfigBackup()
+	case configHistoryView:
+		m.reloadConfigBackup()
+		return m, loadCommitsCmd(m.configBackup.RepoDir)
 	}
 	return m, nil
 }
