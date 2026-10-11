@@ -24,7 +24,8 @@ const miniLogo = " BAKY"
 
 // Init initializes the TUI model and returns the initial command
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	// The service state is shown in the main menu
+	return tea.Batch(textinput.Blink, queryServiceCmd())
 }
 
 // Update handles messages and updates the TUI model accordingly
@@ -41,6 +42,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case restoreFinishedMsg:
 		return m.handleRestoreFinished(msg)
+
+	case serviceStateMsg:
+		return m.handleServiceState(msg)
+
+	case serviceActionMsg:
+		return m.handleServiceAction(msg)
+
+	case logsLoadedMsg:
+		return m.handleLogsLoaded(msg)
+
+	case tickLogsMsg:
+		// Keep refreshing only while the log screen is open
+		if m.state != logsView {
+			return m, nil
+		}
+		return m, tea.Batch(loadLogsCmd(), tickLogsCmd())
 
 	case commitsLoadedMsg:
 		return m.handleCommitsLoaded(msg)
@@ -82,6 +99,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleConfigRepoInputUpdate(msg)
 		case configHistoryView:
 			return m.handleConfigHistoryUpdate(msg)
+		case serviceStatusView:
+			return m.handleServiceStatusUpdate(msg)
+		case logsView:
+			return m.handleLogsUpdate(msg)
 		default:
 			return m.handleMenuUpdate(msg)
 		}
@@ -134,6 +155,10 @@ func (m Model) View() string {
 			m.renderConfigRepoInput(&body)
 		case configHistoryView:
 			m.renderConfigHistory(&body)
+		case serviceStatusView:
+			m.renderServiceStatus(&body)
+		case logsView:
+			m.renderLogs(&body)
 		}
 	}
 

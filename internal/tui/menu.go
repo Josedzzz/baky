@@ -29,6 +29,7 @@ var menus = map[sessionState]menu{
 		entries: []menuEntry{
 			{"Respaldo de archivos", filesMenuView},
 			{"Respaldo de configuraciones", configMenuView},
+			{"Servicio", serviceMenuView},
 			{"Salir", quitEntry},
 		},
 	},
@@ -47,6 +48,13 @@ var menus = map[sessionState]menu{
 			{"Carpetas vigiladas", watchesView},
 			{"Historial de cambios", configHistoryView},
 			{"Repositorio", configRepoView},
+		},
+	},
+	serviceMenuView: {
+		title: " SERVICIO ",
+		entries: []menuEntry{
+			{"Estado del servicio", serviceStatusView},
+			{"Logs en vivo", logsView},
 		},
 	},
 }
@@ -103,7 +111,7 @@ func (m Model) open(target sessionState) (tea.Model, tea.Cmd) {
 	m.message = ""
 
 	switch target {
-	case filesMenuView, configMenuView:
+	case filesMenuView, configMenuView, serviceMenuView:
 		m.cursor = m.menuCursors[target]
 	case managePathsView:
 		m.reloadPaths()
@@ -126,6 +134,11 @@ func (m Model) open(target sessionState) (tea.Model, tea.Cmd) {
 	case configHistoryView:
 		m.reloadConfigBackup()
 		return m, loadCommitsCmd(m.configBackup.RepoDir)
+	case serviceStatusView:
+		m.serviceLoading = true
+		return m, queryServiceCmd()
+	case logsView:
+		return m, tea.Batch(loadLogsCmd(), tickLogsCmd())
 	}
 	return m, nil
 }
@@ -175,6 +188,16 @@ func (m Model) summary() string {
 		dest = m.backupDest
 	}
 
-	return fmt.Sprintf("\nDestino de respaldo: %s\nRutas de archivos: %d • Carpetas vigiladas: %d",
-		dest, len(m.paths), len(m.configBackup.Watches))
+	serviceState := "consultando..."
+	if m.serviceKnown {
+		serviceState = m.service.Status
+		if m.service.Active {
+			serviceState = "activo"
+		} else if m.service.Status == "inactive" {
+			serviceState = "inactivo"
+		}
+	}
+
+	return fmt.Sprintf("\nDestino de respaldo: %s\nRutas de archivos: %d • Carpetas vigiladas: %d\nServicio: %s",
+		dest, len(m.paths), len(m.configBackup.Watches), serviceState)
 }
