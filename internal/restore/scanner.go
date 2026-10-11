@@ -17,22 +17,22 @@ var backupFilenamePattern = regexp.MustCompile(`^(.+?)_(\d{8})_(\d{6})\.tar\.gz$
 // organized by source path
 func ScanBackups(nasPath string) (map[string]*BackupList, error) {
 	if nasPath == "" {
-		return nil, fmt.Errorf("NAS path not configured")
+		return nil, fmt.Errorf("el destino de respaldo no está configurado")
 	}
 
 	// Check if NAS path exists
 	info, err := os.Stat(nasPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot access NAS path: %w", err)
+		return nil, fmt.Errorf("no se puede acceder al destino de respaldo: %w", err)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("NAS path is not a directory: %s", nasPath)
+		return nil, fmt.Errorf("el destino de respaldo no es una carpeta: %s", nasPath)
 	}
 
 	// Read all files in NAS directory
 	entries, err := os.ReadDir(nasPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read NAS directory: %w", err)
+		return nil, fmt.Errorf("no se puede leer el destino de respaldo: %w", err)
 	}
 
 	backupsBySource := make(map[string]*BackupList)
@@ -110,10 +110,6 @@ func GetAllBackupsEnhanced(nasPath string, configPaths []ConfigPath, historyEven
 	pathMap := make(map[string]string)
 	for _, configPath := range configPaths {
 		basename := filepath.Base(configPath.Path)
-		if _, exists := pathMap[basename]; exists {
-			fmt.Printf("Warning: Duplicate basename '%s' for paths '%s' and '%s'. Backup resolution may be ambiguous.\n",
-				basename, pathMap[basename], configPath.Path)
-		}
 		pathMap[basename] = configPath.Path
 	}
 

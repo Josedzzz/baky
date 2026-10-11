@@ -22,13 +22,13 @@ import (
 func RunBackup(sourcePath string) error {
 	nasPath, err := config.GetNasPath()
 	if err != nil || nasPath == "" {
-		return fmt.Errorf("NAS path not configured")
+		return fmt.Errorf("el destino de respaldo no está configurado")
 	}
 
 	// Check if source path exists
 	if _, err := os.Stat(sourcePath); err != nil {
-		config.LogBackup(sourcePath, false, fmt.Sprintf("Source path error: %v", err))
-		return fmt.Errorf("source path error: %v", err)
+		config.LogBackup(sourcePath, false, fmt.Sprintf("No se puede acceder a la ruta: %v", err))
+		return fmt.Errorf("no se puede acceder a la ruta: %v", err)
 	}
 
 	// Create backup filename: [base_name]_[timestamp].tar.gz
@@ -47,7 +47,7 @@ func RunBackup(sourcePath string) error {
 		os.Remove(destPath)
 	}
 	if logErr := config.LogBackup(sourcePath, err == nil, msg); logErr != nil && err == nil {
-		return fmt.Errorf("backup created, but the history could not be updated: %w", logErr)
+		return fmt.Errorf("respaldo creado, pero no se pudo actualizar el historial: %w", logErr)
 	}
 
 	return err
