@@ -161,7 +161,8 @@ func parseBackupFilename(filename, nasPath string) (*BackupInfo, error) {
 	timeStr := matches[3]
 
 	// Parse timestamp
-	timestamp, err := time.Parse("20060102 150405", dateStr+" "+timeStr)
+	// Filenames are written in local time, so they must be read back the same way
+	timestamp, err := time.ParseInLocation("20060102 150405", dateStr+" "+timeStr, time.Local)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timestamp in filename: %s", filename)
 	}
