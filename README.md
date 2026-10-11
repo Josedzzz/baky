@@ -149,14 +149,110 @@ baky/
 
 El código (identificadores y comentarios) está en inglés; la interfaz y la documentación, en español.
 
-## Desarrollo
+## Pruebas
+
+### Pruebas automáticas
+
+```bash
+go test ./...          # todas las pruebas
+go test -race ./...    # además detecta condiciones de carrera
+go vet ./...           # análisis estático
+```
+
+No usan la red ni tocan la configuración real: cada prueba trabaja en carpetas temporales, y el respaldo de configuraciones se prueba contra un repositorio Git local que hace de remoto.
+
+| Paquete | Qué cubren sus pruebas |
+|---|---|
+| `internal/backup` | Creación del `tar.gz` (carpetas, archivo único, enlaces simbólicos) y cuándo toca un respaldo programado |
+| `internal/restore` | Restauración con sobrescribir, renombrar y omitir; respaldo dañado; archivo único |
+| `internal/gitbackup` | Crear, modificar, eliminar y renombrar archivos; subcarpetas; carpetas movidas; archivos temporales; fallo y reintento de push |
+| `internal/daemon` | El servicio completo con ambos motores y un cambio de configuración en caliente |
+| `internal/config` | Guardado, historial en `state.json`, migración de configuraciones antiguas, archivo dañado, carpetas vigiladas |
+| `internal/tui` | Navegación por los menús y los flujos principales, enviando teclas al modelo |
+| `internal/logging`, `internal/watch` | Formato y lectura del log; vigilancia recursiva |
+
+### Probar a mano sin instalar nada
+
+Se puede probar todo en una carpeta temporal, sin systemd, sin `sudo` y sin tocar `~/.config/baky`. La variable `BAKY_CONFIG` hace que baky use una configuración aparte.
+
+**1. Preparar el entorno de prueba**
 
 ```bash
 go build -o baky ./cmd
-go test ./...
+
+export PRUEBA=/tmp/baky-prueba
+export BAKY_CONFIG=$PRUEBA/cfg/config.json
+mkdir -p $PRUEBA/cfg $PRUEBA/etc/firewall $PRUEBA/docs $PRUEBA/nas
+
+# Un repositorio "remoto" local y su clon, que hace de repositorio de configuraciones
+git init --bare --initial-branch=main $PRUEBA/remoto.git
+git init --initial-branch=main $PRUEBA/repo
+git -C $PRUEBA/repo remote add origin $PRUEBA/remoto.git
+
+echo "regla 1" > $PRUEBA/etc/firewall/reglas.conf
+echo "hola" > $PRUEBA/docs/informe.txt
 ```
 
-Las pruebas no usan la red: el respaldo de configuraciones se prueba contra un repositorio Git local que hace de remoto.
+**2. Iniciar el servicio en una terminal**
+
+```bash
+./baky daemon
+```
+
+Queda en primer plano mostrando el log. Se detiene con `Ctrl+C`.
+
+**3. Abrir la interfaz en otra terminal**
+
+```bash
+export PRUEBA=/tmp/baky-prueba
+export BAKY_CONFIG=$PRUEBA/cfg/config.json
+./baky
+```
+
+El menú principal mostrará el servicio como inactivo: es lo esperado, porque en esta prueba el daemon no corre bajo systemd. Por lo mismo, las teclas de iniciar y detener de *Servicio → Estado del servicio* no aplican aquí.
+
+**4. Probar el respaldo de configuraciones**
+
+1. *Respaldo de configuraciones → Repositorio*: `e`, escribir `/tmp/baky-prueba/repo`, `enter`.
+2. *Respaldo de configuraciones → Carpetas vigiladas*: `a`, escribir `/tmp/baky-prueba/etc/firewall`, `enter`, aceptar el nombre `firewall` con `enter`.
+3. En una tercera terminal, modificar, crear y borrar archivos:
+
+   ```bash
+   echo "regla 2" >> /tmp/baky-prueba/etc/firewall/reglas.conf
+   mkdir /tmp/baky-prueba/etc/firewall/extra
+   echo "nat" > /tmp/baky-prueba/etc/firewall/extra/nat.conf
+   rm /tmp/baky-prueba/etc/firewall/reglas.conf
+   ```
+
+4. Resultado esperado, a los pocos segundos de cada cambio:
+   - En *Historial de cambios* (`r` para refrescar): un commit por archivo, `auto-backup: actualizado ...` o `auto-backup: eliminado ...`.
+   - En *Servicio → Logs en vivo*: `Commit realizado` y `Push exitoso`.
+   - En el remoto: `git -C /tmp/baky-prueba/remoto.git log --oneline main` muestra los mismos commits.
+
+Para probar la sincronización al iniciar: detener el daemon con `Ctrl+C`, cambiar un archivo de la carpeta vigilada y volver a iniciarlo. El cambio debe quedar respaldado al arrancar.
+
+**5. Probar el respaldo de archivos**
+
+1. *Respaldo de archivos → Destino de respaldo*: `e`, escribir `/tmp/baky-prueba/nas`, `enter`; `t` debe decir que es accesible.
+2. *Respaldo de archivos → Gestionar rutas*: `a`, escribir `/tmp/baky-prueba/docs`, `enter`.
+3. *Respaldo de archivos → Respaldar ahora*: `enter`. Debe aparecer un `docs_AAAAMMDD_HHMMSS.tar.gz` en `/tmp/baky-prueba/nas`.
+4. *Ver respaldos / Restaurar*: `enter` sobre el respaldo, `c`, escribir `/tmp/baky-prueba/restaurado`, `enter`, y `enter` de nuevo. El archivo `informe.txt` debe aparecer en esa carpeta.
+5. Respaldo al cambiar: en *Gestionar rutas* presionar `f` hasta ver `[al cambiar]`, luego modificar un archivo:
+
+   ```bash
+   echo "cambio" >> /tmp/baky-prueba/docs/informe.txt
+   ```
+
+   Unos 5 segundos después el daemon crea un nuevo `tar.gz`, y el log muestra `Respaldo por cambio iniciado` y `Respaldo completado`.
+
+**6. Limpiar**
+
+```bash
+rm -rf /tmp/baky-prueba
+unset PRUEBA BAKY_CONFIG
+```
+
+La prueba sobre una instalación real (servicio de systemd y repositorio remoto) está en el paso 7 de [docs/instalacion.md](docs/instalacion.md).
 
 ## Pendiente
 
