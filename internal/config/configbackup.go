@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // DefaultBranch is the branch config backups are pushed to when none is set
@@ -13,6 +14,50 @@ const DefaultBranch = "main"
 type WatchConfig struct {
 	Source string `json:"source"` // Absolute path of the directory to watch
 	Dest   string `json:"dest"`   // Folder inside the repository that receives its files
+
+	// Check is an optional command that validates the configuration in
+	// {dir}. It runs after every change and before a restore.
+	Check string `json:"check,omitempty"`
+	// Apply is an optional command that puts the configuration in {dir}
+	// into service safely. It runs when a file is restored.
+	Apply string `json:"apply,omitempty"`
+}
+
+// DirPlaceholder is replaced in the check and apply commands by the
+// directory that holds the configuration
+const DirPlaceholder = "{dir}"
+
+// ValidateWatchCommand checks a check or apply command. An empty command
+// is valid and means the step is skipped.
+func ValidateWatchCommand(command string) error {
+	if strings.TrimSpace(command) == "" {
+		return nil
+	}
+	if !strings.Contains(command, DirPlaceholder) {
+		return fmt.Errorf("el comando debe incluir %s, que se reemplaza por la carpeta de la configuración", DirPlaceholder)
+	}
+	return nil
+}
+
+// SetWatchCommands sets the validation and apply commands of a watch
+func SetWatchCommands(source, check, apply string) error {
+	check, apply = strings.TrimSpace(check), strings.TrimSpace(apply)
+	for _, command := range []string{check, apply} {
+		if err := ValidateWatchCommand(command); err != nil {
+			return err
+		}
+	}
+
+	return update(func(cfg *Config) error {
+		for i, w := range cfg.ConfigBackup.Watches {
+			if w.Source == source {
+				cfg.ConfigBackup.Watches[i].Check = check
+				cfg.ConfigBackup.Watches[i].Apply = apply
+				return nil
+			}
+		}
+		return fmt.Errorf("la carpeta '%s' no está siendo vigilada", source)
+	})
 }
 
 // ConfigBackup holds the settings of the versioned backup of configuration

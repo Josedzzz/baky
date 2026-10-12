@@ -275,3 +275,35 @@ func TestImportMagitiConfig(t *testing.T) {
 		t.Errorf("expected an error for an invalid file")
 	}
 }
+
+func TestWatchCommands(t *testing.T) {
+	useTempConfig(t)
+	AddWatch("/etc/shorewall", "firewall")
+
+	if err := SetWatchCommands("/etc/shorewall", "shorewall check", ""); err == nil {
+		t.Errorf("expected an error for a command without {dir}")
+	}
+	if err := SetWatchCommands("/etc/otro", "x {dir}", ""); err == nil {
+		t.Errorf("expected an error for a folder that is not watched")
+	}
+
+	if err := SetWatchCommands("/etc/shorewall", " sudo -n shorewall check {dir} ", "sudo -n shorewall try {dir}"); err != nil {
+		t.Fatal(err)
+	}
+	cb, _ := GetConfigBackup()
+	want := WatchConfig{
+		Source: "/etc/shorewall", Dest: "firewall",
+		Check: "sudo -n shorewall check {dir}", Apply: "sudo -n shorewall try {dir}",
+	}
+	if cb.Watches[0] != want {
+		t.Errorf("unexpected watch: %+v", cb.Watches[0])
+	}
+
+	// Empty commands remove the steps
+	if err := SetWatchCommands("/etc/shorewall", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if cb, _ := GetConfigBackup(); cb.Watches[0].Check != "" || cb.Watches[0].Apply != "" {
+		t.Errorf("expected the commands to be removed: %+v", cb.Watches[0])
+	}
+}
