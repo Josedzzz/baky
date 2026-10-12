@@ -78,6 +78,25 @@ Ejecute `baky` con el usuario elegido:
 
 El servicio aplica cada cambio por sí solo. En **Servicio → Logs en vivo** se ve lo que hace.
 
+### Validar las configuraciones (opcional)
+
+En **Carpetas vigiladas**, `c` sobre una carpeta permite definir el comando que la valida y el que la aplica. Para un firewall Shorewall:
+
+| Paso | Comando |
+|---|---|
+| Validación | `sudo -n shorewall check {dir}` |
+| Aplicación | `sudo -n shorewall try {dir}` |
+
+El usuario del servicio debe poder ejecutar esos comandos con `sudo` sin contraseña. Si no es ya administrador, la regla mínima es:
+
+```
+grid ALL=(root) NOPASSWD: /usr/sbin/shorewall check *, /usr/sbin/shorewall try *, /usr/bin/install
+```
+
+`install` hace falta para que la restauración pueda escribir en carpetas de root como `/etc/shorewall`. Tenga en cuenta que quien pueda editar la configuración de baky decide qué comandos se ejecutan con esos permisos.
+
+No vigile carpetas que contengan llaves privadas (por ejemplo `/etc/openvpn` con su PKI): baky respalda todos los archivos de la carpeta y los envía al repositorio.
+
 ## 7. Comprobar que funciona
 
 ```bash
@@ -110,6 +129,7 @@ Después de comprobar que baky funciona, se pueden retirar la unidad `/etc/syste
 |---|---|
 | El log muestra `Fallo al hacer push` | El usuario del servicio no tiene acceso SSH al remoto, o el clon usa una dirección HTTPS. Los commits quedan guardados y se reintenta. |
 | `Respaldo de configuraciones desactivado: ... no es un repositorio Git válido` | La ruta configurada no es un clon de Git. Corríjala en *Repositorio*. |
+| Un cambio aparece como `[validación fallida]` | La configuración guardada no pasa el comando de validación. El log y el commit traen el error. Si el error es de `sudo`, falta el permiso sin contraseña. |
 | `Carpeta vigilada no accesible, se omite` | La carpeta no existe o el usuario del servicio no puede leerla. Lo ya respaldado se conserva. |
 | La interfaz muestra el servicio como inactivo | `systemctl status baky.service` y `journalctl -u baky.service` muestran el motivo. |
 | Iniciar o detener desde la interfaz falla | Falta la regla de sudoers del paso 5. |

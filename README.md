@@ -107,6 +107,21 @@ Además:
 - Si el envío al remoto falla, los commits quedan en el repositorio local y se reintenta.
 - Si una carpeta vigilada deja de estar accesible, conserva lo ya respaldado.
 
+#### Validar cada cambio
+
+Cada carpeta vigilada puede tener dos comandos opcionales, que se definen con `c` en *Carpetas vigiladas*. `{dir}` se reemplaza por la carpeta que contiene la configuración:
+
+| Comando | Ejemplo con Shorewall | Cuándo se ejecuta |
+|---|---|---|
+| Validación | `sudo -n shorewall check {dir}` | Después de cada cambio detectado, y antes de restaurar |
+| Aplicación | `sudo -n shorewall try {dir}` | Solo al restaurar un archivo desde el historial |
+
+Cuando un cambio no pasa la validación, baky lo respalda igual (el respaldo refleja lo que hay en el disco), pero lo marca: el commit termina en `[validación fallida]`, guarda el error del validador, aparece en rojo en el historial y queda una advertencia en el log. Así un error de sintaxis se conoce a los pocos segundos de guardarlo, antes de que alguien reinicie el servicio.
+
+baky nunca aplica por su cuenta un cambio que detecta: solo lo valida.
+
+Los comandos se ejecutan tal como están escritos, sin intérprete de comandos. Si necesitan privilegios deben empezar con `sudo -n`, y el usuario del servicio debe tener ese permiso sin contraseña (ver [docs/instalacion.md](docs/instalacion.md)).
+
 #### Restaurar una configuración anterior
 
 En *Respaldo de configuraciones → Historial de cambios* cada línea es un cambio respaldado. Al elegir uno con `enter`, baky compara el archivo actual con la versión guardada en ese cambio y muestra qué pasaría al restaurarla:
@@ -119,7 +134,14 @@ En *Respaldo de configuraciones → Historial de cambios* cada línea es un camb
   -A INPUT -p tcp --dport 443 -j ACCEPT
 ```
 
-Con `r` se restaura esa versión, previa confirmación. La restauración escribe el archivo vigilado; el servicio la detecta y la registra como un cambio más, de modo que también se puede deshacer. Si el cambio elegido eliminó el archivo, no contiene una versión que restaurar: se elige uno anterior.
+Con `r` se restaura esa versión, previa confirmación. Si la carpeta tiene comandos de validación y aplicación, la restauración no toca la configuración real hasta saber que es buena:
+
+1. Copia la carpeta a un directorio temporal y pone ahí la versión a restaurar.
+2. Ejecuta la validación sobre esa copia. Si falla, se detiene.
+3. Ejecuta la aplicación sobre esa copia. Si falla, se detiene.
+4. Solo entonces escribe el archivo en la carpeta vigilada, conservando su dueño y sus permisos. Si el usuario no puede escribir ahí, lo instala con `sudo`.
+
+El servicio detecta la restauración y la registra como un cambio más, de modo que también se puede deshacer. Si el cambio elegido eliminó el archivo, no contiene una versión que restaurar: se elige uno anterior.
 
 El repositorio de configuraciones es un repositorio dedicado, separado del código. En el GRID es [`grid-config-data`](https://github.com/MiguelFVasquez/grid-config-data).
 
@@ -147,7 +169,12 @@ Ejemplo de `config.json`:
     "branch": "main",
     "watches": [
       { "source": "/etc/openvpn", "dest": "vpn" },
-      { "source": "/etc/iptables", "dest": "firewall" }
+      {
+        "source": "/etc/shorewall",
+        "dest": "firewall",
+        "check": "sudo -n shorewall check {dir}",
+        "apply": "sudo -n shorewall try {dir}"
+      }
     ]
   }
 }
@@ -193,7 +220,7 @@ No usan la red ni tocan la configuración real: cada prueba trabaja en carpetas 
 |---|---|
 | `internal/backup` | Creación del `tar.gz` (carpetas, archivo único, enlaces simbólicos) y cuándo toca un respaldo programado |
 | `internal/restore` | Restauración con sobrescribir, renombrar y omitir; respaldo dañado; archivo único; vista previa de los cambios |
-| `internal/gitbackup` | Crear, modificar, eliminar y renombrar archivos; subcarpetas; carpetas movidas; archivos temporales; fallo y reintento de push; comparar y restaurar una versión anterior |
+| `internal/gitbackup` | Crear, modificar, eliminar y renombrar archivos; subcarpetas; carpetas movidas; archivos temporales; fallo y reintento de push; validación de cada cambio; comparar y restaurar una versión anterior con validación previa |
 | `internal/daemon` | El servicio completo con ambos motores y un cambio de configuración en caliente |
 | `internal/config` | Guardado, historial en `state.json`, migración de configuraciones antiguas, archivo dañado, carpetas vigiladas |
 | `internal/tui` | Navegación por los menús y los flujos principales, enviando teclas al modelo |
@@ -291,7 +318,6 @@ La prueba sobre una instalación real (servicio de systemd y repositorio remoto)
 - Alertas ante fallos del servicio.
 - Comparación de versiones de respaldos desde la interfaz (`internal/restore/diff.go` ya calcula las diferencias).
 - Respaldo consistente de máquinas virtuales en ejecución.
-- Validación de sintaxis de las reglas de Firewall antes del commit.
 
 ## Documentación
 
