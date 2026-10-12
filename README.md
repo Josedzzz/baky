@@ -94,6 +94,20 @@ Además:
 - Si el envío al remoto falla, los commits quedan en el repositorio local y se reintenta.
 - Si una carpeta vigilada deja de estar accesible, conserva lo ya respaldado.
 
+#### Restaurar una configuración anterior
+
+En *Respaldo de configuraciones → Historial de cambios* cada línea es un cambio respaldado. Al elegir uno con `enter`, baky compara el archivo actual con la versión guardada en ese cambio y muestra qué pasaría al restaurarla:
+
+```
+── Cambios desde la línea 1 del archivo actual ──
+  -A INPUT -p tcp --dport 22 -j ACCEPT
+- -A INPUT -p tcp --dport 8080 -j ACCEPT      línea actual que se quita
++ -A INPUT -p tcp --dport 80 -j ACCEPT        línea que vuelve
+  -A INPUT -p tcp --dport 443 -j ACCEPT
+```
+
+Con `r` se restaura esa versión, previa confirmación. La restauración escribe el archivo vigilado; el servicio la detecta y la registra como un cambio más, de modo que también se puede deshacer. Si el cambio elegido eliminó el archivo, no contiene una versión que restaurar: se elige uno anterior.
+
 El repositorio de configuraciones es un repositorio dedicado, separado del código. En el GRID es [`grid-config-data`](https://github.com/MiguelFVasquez/grid-config-data).
 
 ## Archivos
@@ -165,7 +179,7 @@ No usan la red ni tocan la configuración real: cada prueba trabaja en carpetas 
 |---|---|
 | `internal/backup` | Creación del `tar.gz` (carpetas, archivo único, enlaces simbólicos) y cuándo toca un respaldo programado |
 | `internal/restore` | Restauración con sobrescribir, renombrar y omitir; respaldo dañado; archivo único |
-| `internal/gitbackup` | Crear, modificar, eliminar y renombrar archivos; subcarpetas; carpetas movidas; archivos temporales; fallo y reintento de push |
+| `internal/gitbackup` | Crear, modificar, eliminar y renombrar archivos; subcarpetas; carpetas movidas; archivos temporales; fallo y reintento de push; comparar y restaurar una versión anterior |
 | `internal/daemon` | El servicio completo con ambos motores y un cambio de configuración en caliente |
 | `internal/config` | Guardado, historial en `state.json`, migración de configuraciones antiguas, archivo dañado, carpetas vigiladas |
 | `internal/tui` | Navegación por los menús y los flujos principales, enviando teclas al modelo |
@@ -226,6 +240,7 @@ El menú principal mostrará el servicio como inactivo: es lo esperado, porque e
 
 4. Resultado esperado, a los pocos segundos de cada cambio:
    - En *Historial de cambios* (`r` para refrescar): un commit por archivo, `auto-backup: actualizado ...` o `auto-backup: eliminado ...`.
+   - En *Historial de cambios*, `enter` sobre un cambio anterior muestra las diferencias con el archivo actual, y `r` lo restaura.
    - En *Servicio → Logs en vivo*: `Commit realizado` y `Push exitoso`.
    - En el remoto: `git -C /tmp/baky-prueba/remoto.git log --oneline main` muestra los mismos commits.
 
@@ -260,7 +275,6 @@ La prueba sobre una instalación real (servicio de systemd y repositorio remoto)
 - Cifrado de los respaldos y del repositorio de configuraciones.
 - Alertas ante fallos del servicio.
 - Comparación de versiones de respaldos desde la interfaz (`internal/restore/diff.go` ya calcula las diferencias).
-- Restauración de una configuración anterior desde el historial.
 - Respaldo consistente de máquinas virtuales en ejecución.
 - Validación de sintaxis de las reglas de Firewall antes del commit.
 
