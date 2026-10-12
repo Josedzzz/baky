@@ -76,6 +76,19 @@ Los respaldos se guardan en el destino como `[nombre]_AAAAMMDD_HHMMSS.tar.gz`. A
 - **Renombrar**: guarda lo existente con la fecha en el nombre y restaura el respaldo.
 - **Omitir**: no restaura si ya hay archivos.
 
+Antes de restaurar, baky muestra qué cambiaría en el destino elegido:
+
+```
+CAMBIOS DE LA RESTAURACIÓN
+M se modifican: 1   + se crean: 1   = quedan igual: 1
+
+M informe.txt  (se modifica)
++ borrado.txt  (se crea)
+= igual.txt  (queda igual)
+```
+
+Con `enter` sobre un archivo se ven sus diferencias línea por línea contra el archivo actual (en rojo lo que se quita, en verde lo que vuelve), y con `r` se continúa con la restauración. Esta vista previa no modifica nada. La comparación línea por línea usa `git`, y solo aplica a archivos de texto.
+
 El respaldo siempre se extrae primero a una carpeta temporal: un respaldo dañado nunca modifica lo que ya existe en el destino.
 
 ### Respaldo de configuraciones
@@ -156,6 +169,7 @@ baky/
 │   ├── config/            Configuración y estado compartidos entre TUI y servicio
 │   ├── logging/           Escritura y lectura del log del servicio
 │   ├── watch/             Vigilancia recursiva de carpetas (fsnotify)
+│   ├── textdiff/          Comparación línea por línea de dos versiones de un archivo
 │   └── tui/               Interfaz de terminal, un archivo por pantalla
 ├── deploy/                Unidad de systemd y regla de sudoers
 └── docs/                  Instalación y registros de pruebas
@@ -178,12 +192,12 @@ No usan la red ni tocan la configuración real: cada prueba trabaja en carpetas 
 | Paquete | Qué cubren sus pruebas |
 |---|---|
 | `internal/backup` | Creación del `tar.gz` (carpetas, archivo único, enlaces simbólicos) y cuándo toca un respaldo programado |
-| `internal/restore` | Restauración con sobrescribir, renombrar y omitir; respaldo dañado; archivo único |
+| `internal/restore` | Restauración con sobrescribir, renombrar y omitir; respaldo dañado; archivo único; vista previa de los cambios |
 | `internal/gitbackup` | Crear, modificar, eliminar y renombrar archivos; subcarpetas; carpetas movidas; archivos temporales; fallo y reintento de push; comparar y restaurar una versión anterior |
 | `internal/daemon` | El servicio completo con ambos motores y un cambio de configuración en caliente |
 | `internal/config` | Guardado, historial en `state.json`, migración de configuraciones antiguas, archivo dañado, carpetas vigiladas |
 | `internal/tui` | Navegación por los menús y los flujos principales, enviando teclas al modelo |
-| `internal/logging`, `internal/watch` | Formato y lectura del log; vigilancia recursiva |
+| `internal/logging`, `internal/watch`, `internal/textdiff` | Formato y lectura del log; vigilancia recursiva; comparación línea por línea |
 
 ### Probar a mano sin instalar nada
 
@@ -251,8 +265,9 @@ Para probar la sincronización al iniciar: detener el daemon con `Ctrl+C`, cambi
 1. *Respaldo de archivos → Destino de respaldo*: `e`, escribir `/tmp/baky-prueba/nas`, `enter`; `t` debe decir que es accesible.
 2. *Respaldo de archivos → Gestionar rutas*: `a`, escribir `/tmp/baky-prueba/docs`, `enter`.
 3. *Respaldo de archivos → Respaldar ahora*: `enter`. Debe aparecer un `docs_AAAAMMDD_HHMMSS.tar.gz` en `/tmp/baky-prueba/nas`.
-4. *Ver respaldos / Restaurar*: `enter` sobre el respaldo, `c`, escribir `/tmp/baky-prueba/restaurado`, `enter`, y `enter` de nuevo. El archivo `informe.txt` debe aparecer en esa carpeta.
-5. Respaldo al cambiar: en *Gestionar rutas* presionar `f` hasta ver `[al cambiar]`, luego modificar un archivo:
+4. *Ver respaldos / Restaurar*: `enter` sobre el respaldo, `c`, escribir `/tmp/baky-prueba/restaurado`, `enter`. Aparece la lista de cambios de la restauración (aquí, `informe.txt` se crea); `r` para continuar y `enter` para confirmar. El archivo `informe.txt` debe aparecer en esa carpeta.
+5. Vista previa con diferencias: modificar el archivo original (`echo "otra linea" >> /tmp/baky-prueba/docs/informe.txt`), volver a *Ver respaldos / Restaurar*, `enter` sobre el respaldo y `o` (ubicación original). El archivo aparece como "se modifica"; `enter` muestra la línea que se quitaría.
+6. Respaldo al cambiar: en *Gestionar rutas* presionar `f` hasta ver `[al cambiar]`, luego modificar un archivo:
 
    ```bash
    echo "cambio" >> /tmp/baky-prueba/docs/informe.txt
