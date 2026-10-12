@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -147,6 +148,37 @@ func TestRestoreCorruptBackupLeavesDestinationIntact(t *testing.T) {
 	entries, _ := os.ReadDir(tmp)
 	if len(entries) != 2 {
 		t.Errorf("expected only the backup and the destination, found %d entries", len(entries))
+	}
+	assertNoStaging(t, dest)
+}
+
+// TestRestoreDetectsCorruptedData checks that a backup whose gzip checksum no
+// longer matches fails to restore, instead of restoring silently wrong data.
+// The tar reader stops before the gzip trailer, so the restore must read the
+// stream to the end to validate the CRC.
+func TestRestoreDetectsCorruptedData(t *testing.T) {
+	tmp := t.TempDir()
+	backup := filepath.Join(tmp, "docs_20260101_000000.tar.gz")
+	writeBackup(t, backup, []tarEntry{
+		{name: ".", typeflag: tar.TypeDir},
+		{name: "a.txt", typeflag: tar.TypeReg, content: strings.Repeat("grid ", 4000)},
+	})
+
+	// Corrupt the gzip CRC32 trailer (last 8 bytes are CRC + size). The header
+	// and tar structure stay valid, so the archive opens and its entries read,
+	// but the checksum no longer matches the data.
+	data, err := os.ReadFile(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data[len(data)-5] ^= 0xFF
+	if err := os.WriteFile(backup, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(tmp, "docs")
+	if _, err := Restore(backup, dest, RestoreActionOverwrite); err == nil {
+		t.Error("expected an error restoring a backup with a bad checksum")
 	}
 	assertNoStaging(t, dest)
 }

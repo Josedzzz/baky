@@ -11,6 +11,17 @@ import (
 	"strings"
 )
 
+// verifyGzipTail drains the gzip reader to its end so its CRC32 and size
+// trailer are checked. The tar reader stops at the logical end of the archive,
+// before that trailer, so without this a corrupted backup would be restored as
+// if it were valid, with silently wrong contents, instead of failing.
+func verifyGzipTail(r *gzip.Reader) error {
+	if _, err := io.Copy(io.Discard, r); err != nil {
+		return fmt.Errorf("respaldo corrupto: %w", err)
+	}
+	return nil
+}
+
 // ExtractBackup extracts a tar.gz backup file to a destination directory
 // If the backup contains a single root directory, it extracts the contents of that directory
 // Otherwise, it extracts all files to the destination
@@ -105,7 +116,10 @@ func extractSingleFile(backupPath, targetPath string) error {
 		return fmt.Errorf("error reading tar: %w", err)
 	}
 
-	return writeFile(targetPath, true, header, tarReader)
+	if err := writeFile(targetPath, true, header, tarReader); err != nil {
+		return err
+	}
+	return verifyGzipTail(gzipReader)
 }
 
 // inspectBackup opens a tar.gz file and scans headers to detect
@@ -216,7 +230,7 @@ func extractFiles(backupPath, destPath string, rootDir string, singleRoot bool) 
 		}
 	}
 
-	return nil
+	return verifyGzipTail(gzipReader)
 }
 
 // extractFilesWithCallback extracts a tar.gz and calls progressCallback per file
@@ -275,7 +289,7 @@ func extractFilesWithCallback(backupPath, destPath string, rootDir string, singl
 		}
 	}
 
-	return nil
+	return verifyGzipTail(gzipReader)
 }
 
 // writeFile creates a file or directory from a tar header
