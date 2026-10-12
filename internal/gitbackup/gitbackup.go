@@ -6,8 +6,10 @@ package gitbackup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +30,15 @@ const (
 type Watch struct {
 	Source string // Absolute path of the directory to watch
 	Dest   string // Folder inside the repository that receives its files
+
+	// Check is an optional command that validates the configuration in a
+	// directory, such as "sudo -n shorewall check {dir}". It runs after
+	// every change, and before a restore is applied.
+	Check string
+	// Apply is an optional command that puts the configuration of a
+	// directory into service safely, such as "sudo -n shorewall try {dir}".
+	// It only runs when a file is restored from the history.
+	Apply string
 }
 
 // Options configures a Backuper
@@ -54,6 +65,7 @@ type Backuper struct {
 
 	mu             sync.Mutex // serializes every operation on the repository
 	warnedNoRemote bool
+	warned         map[string]bool // warnings already logged
 	now            func() time.Time
 }
 
@@ -86,9 +98,14 @@ func New(opts Options) (*Backuper, error) {
 		if w.Dest == "" || w.Dest != filepath.Base(w.Dest) || w.Dest == "." || w.Dest == ".." || w.Dest == ".git" {
 			return nil, fmt.Errorf("destino inválido para %s: %q", w.Source, w.Dest)
 		}
+		for _, hook := range []string{w.Check, w.Apply} {
+			if err := ValidateHook(hook); err != nil {
+				return nil, fmt.Errorf("%s: %w", w.Source, err)
+			}
+		}
 	}
 
-	return &Backuper{opts: opts, now: time.Now}, nil
+	return &Backuper{opts: opts, now: time.Now, warned: map[string]bool{}}, nil
 }
 
 func (b *Backuper) logf(level, format string, args ...any) {
@@ -121,7 +138,13 @@ func (b *Backuper) syncWatch(w Watch) int {
 	defer b.mu.Unlock()
 
 	dest := filepath.Join(b.opts.RepoDir, w.Dest)
-	warn := func(msg string) { b.logf(logging.Warn, "%s", msg) }
+	// A file that cannot be read is reported once, not on every sync
+	warn := func(msg string) {
+		if !b.warned[msg] {
+			b.warned[msg] = true
+			b.logf(logging.Warn, "%s", msg)
+		}
+	}
 
 	if err := mirror(w.Source, dest, warn); err != nil {
 		// The backup already in the repository is left untouched: a folder
@@ -136,15 +159,32 @@ func (b *Backuper) syncWatch(w Watch) int {
 		return 0
 	}
 
+	// The configuration is validated as it is right now, once per group of
+	// changes. An invalid one is still backed up: the backup must reflect
+	// what is on disk, but the commits say so.
+	suffix, checkOutput := "", ""
+	if len(changes) > 0 && w.Check != "" {
+		output, err := runHook(w.Check, w.Source)
+		switch {
+		case err == nil:
+			b.logf(logging.Info, "Validación correcta: %s", w.Source)
+		case errors.Is(err, errHookNotRun):
+			b.logf(logging.Error, "No se pudo validar %s: %v", w.Source, err)
+		default:
+			suffix, checkOutput = " "+invalidMarker, lastLines(output, 20)
+			b.logf(logging.Warn, "La configuración de %s NO pasa la validación: %s", w.Source, strings.ReplaceAll(lastLines(output, 3), "\n", " | "))
+		}
+	}
+
 	commits := 0
 	for _, c := range changes {
 		description := "actualizado " + filepath.Base(c.path)
 		if c.deleted {
 			description = "eliminado " + filepath.Base(c.path)
 		}
-		message := fmt.Sprintf("%s: %s (%s)", commitPrefix, description, b.now().Format("2006-01-02 15:04:05"))
+		message := fmt.Sprintf("%s: %s (%s)%s", commitPrefix, description, b.now().Format("2006-01-02 15:04:05"), suffix)
 
-		if err := commitPath(b.opts.RepoDir, c.path, message); err != nil {
+		if err := commitPath(b.opts.RepoDir, c.path, message, checkOutput); err != nil {
 			b.logf(logging.Error, "Fallo al hacer commit de %s: %v", c.path, err)
 			continue
 		}

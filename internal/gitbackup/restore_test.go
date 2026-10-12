@@ -98,7 +98,7 @@ func TestPreviewAndRestoreAnOlderVersion(t *testing.T) {
 
 	// Restoring writes the old version and keeps the file permissions
 	os.Chmod(live, 0o600)
-	if err := preview.Restore(); err != nil {
+	if _, err := preview.Restore(); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(live)
@@ -135,7 +135,7 @@ func TestPreviewWhenTheFileWasDeleted(t *testing.T) {
 	if preview.InCommit {
 		t.Errorf("expected no version in the deletion commit")
 	}
-	if err := preview.Restore(); err == nil {
+	if _, err := preview.Restore(); err == nil {
 		t.Errorf("expected an error restoring from a deletion commit")
 	}
 
@@ -150,7 +150,7 @@ func TestPreviewWhenTheFileWasDeleted(t *testing.T) {
 	if len(preview.Lines) != 2 || preview.Lines[1].Kind != textdiff.Added || preview.Lines[1].Text != "vpn" {
 		t.Errorf("expected the whole file as added lines, got %+v", preview.Lines)
 	}
-	if err := preview.Restore(); err != nil {
+	if _, err := preview.Restore(); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(live); string(got) != "vpn\n" {

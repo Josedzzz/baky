@@ -70,6 +70,12 @@ const (
 	// watchConfirmDeleteView asks for confirmation before a folder stops being watched
 	watchConfirmDeleteView
 
+	// watchCheckInputView is a sub-state for typing the validation command of a watch
+	watchCheckInputView
+
+	// watchApplyInputView is a sub-state for typing the apply command of a watch
+	watchApplyInputView
+
 	// configRepoView is the state where the user configures the config repository
 	configRepoView
 
@@ -144,17 +150,19 @@ type Model struct {
 	watchInput    textinput.Model // Input for the folder to watch and its destination name
 	repoInput     textinput.Model // Input for the config repository path
 	pendingSource string          // folder typed in the first step of adding a watch
+	pendingCheck  string          // validation command typed before the apply command
 	commits       []gitbackup.Commit
 	commitsErr    string
 	commitsCursor int // cursor for the history list
 	commitsOffset int // for scrolling the history list
 
 	// Restore of a config file from the history
-	selectedCommit gitbackup.Commit   // commit chosen in the history
-	preview        *gitbackup.Preview // what restoring it would change
-	previewErr     string
-	previewLoading bool
-	diffView       viewport.Model
+	selectedCommit  gitbackup.Commit   // commit chosen in the history
+	preview         *gitbackup.Preview // what restoring it would change
+	previewErr      string
+	previewLoading  bool
+	configRestoring bool // a restore from the history is running
+	diffView        viewport.Model
 
 	// Service fields
 	service        service.State

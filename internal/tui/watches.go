@@ -34,6 +34,16 @@ func (m Model) handleWatchesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.state = watchConfirmDeleteView
 			m.message = ""
 		}
+	case "c":
+		if len(watches) > 0 {
+			// Edit the validation command, then the apply command
+			m.state = watchCheckInputView
+			m.watchInput.Placeholder = "sudo -n shorewall check {dir}"
+			m.watchInput.SetValue(watches[m.watchesCursor].Check)
+			m.watchInput.CursorEnd()
+			m.watchInput.Focus()
+			m.message = ""
+		}
 	case "esc":
 		return m.back(configMenuView)
 	}
@@ -145,11 +155,15 @@ func (m Model) renderWatches(body *strings.Builder) {
 			}
 			body.WriteString(style.Render(w.Source+"  →  "+w.Dest) + "\n")
 		}
-		body.WriteString("\n")
+
+		// Hook commands of the selected folder
+		selected := m.configBackup.Watches[m.watchesCursor]
+		body.WriteString("\n" + headerStyle.Render("Validación: ") + commandOrNone(selected.Check) + "\n")
+		body.WriteString(headerStyle.Render("Aplicación: ") + commandOrNone(selected.Apply) + "\n\n")
 	}
 
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("a: agregar • d: dejar de vigilar • esc: volver"))
+	body.WriteString(footerStyle.Render("a: agregar • c: comandos de validación • d: dejar de vigilar • esc: volver"))
 }
 
 // renderWatchInput renders both steps of adding a watched folder
@@ -177,4 +191,75 @@ func (m Model) renderWatchConfirmDelete(body *strings.Builder) {
 	body.WriteString(mutedStyle.Render("No se borra ningún archivo: ni los originales ni los ya respaldados\nen el repositorio. Solo deja de respaldarse automáticamente.") + "\n")
 
 	body.WriteString(footerStyle.Render("\ns/y: confirmar • n/esc: cancelar"))
+}
+
+// commandOrNone shows a hook command, or that there is none
+func commandOrNone(command string) string {
+	if command == "" {
+		return mutedStyle.Render("(ninguna)")
+	}
+	return command
+}
+
+// handleWatchCommandInputUpdate handles the two steps of editing the hook
+// commands of a watch: the validation command, then the apply command
+func (m Model) handleWatchCommandInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch msg.String() {
+	case "esc":
+		m.state = watchesView
+		m.message = ""
+		return m, nil
+	case "enter":
+		value := strings.TrimSpace(m.watchInput.Value())
+		if err := config.ValidateWatchCommand(value); err != nil {
+			m.message = err.Error()
+			m.isSuccess = false
+			return m, nil
+		}
+		watch := m.configBackup.Watches[m.watchesCursor]
+
+		if m.state == watchCheckInputView {
+			m.pendingCheck = value
+			m.state = watchApplyInputView
+			m.watchInput.Placeholder = "sudo -n shorewall try {dir}"
+			m.watchInput.SetValue(watch.Apply)
+			m.watchInput.CursorEnd()
+			m.message = ""
+			return m, nil
+		}
+
+		if err := config.SetWatchCommands(watch.Source, m.pendingCheck, value); err != nil {
+			m.message = err.Error()
+			m.isSuccess = false
+			return m, nil
+		}
+		m.reloadConfigBackup()
+		m.state = watchesView
+		m.message = "Comandos guardados. El servicio aplica el cambio automáticamente."
+		m.isSuccess = true
+		return m, nil
+	}
+	m.watchInput, cmd = m.watchInput.Update(msg)
+	return m, cmd
+}
+
+// renderWatchCommandInput renders both steps of editing the hook commands
+func (m Model) renderWatchCommandInput(body *strings.Builder) {
+	body.WriteString(titleStyle.Render(" COMANDOS DE VALIDACIÓN ") + "\n\n")
+	body.WriteString(headerStyle.Render("Carpeta: ") + itemStyle.Render(m.configBackup.Watches[m.watchesCursor].Source) + "\n\n")
+
+	if m.state == watchCheckInputView {
+		body.WriteString("Paso 1 de 2 - Comando que valida la configuración (vacío = ninguno):\n\n")
+		body.WriteString(m.watchInput.View() + "\n\n")
+		body.WriteString(mutedStyle.Render("Se ejecuta después de cada cambio y antes de restaurar. Si falla, el\ncambio se respalda igual, pero queda marcado como inválido.") + "\n")
+	} else {
+		body.WriteString("Paso 2 de 2 - Comando que aplica la configuración (vacío = ninguno):\n\n")
+		body.WriteString(m.watchInput.View() + "\n\n")
+		body.WriteString(mutedStyle.Render("Solo se ejecuta al restaurar un archivo desde el historial, después\nde validar y antes de escribir el archivo.") + "\n")
+	}
+	body.WriteString(mutedStyle.Render("{dir} se reemplaza por la carpeta con la configuración. El comando se\nejecuta tal cual: si necesita privilegios, debe empezar con \"sudo -n\".") + "\n\n")
+
+	m.renderMessage(body)
+	body.WriteString(footerStyle.Render("(esc: cancelar • enter: continuar)"))
 }

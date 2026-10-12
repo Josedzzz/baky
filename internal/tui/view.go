@@ -111,6 +111,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleWatchDestInputUpdate(msg)
 		case watchConfirmDeleteView:
 			return m.handleWatchConfirmDeleteUpdate(msg)
+		case watchCheckInputView, watchApplyInputView:
+			return m.handleWatchCommandInputUpdate(msg)
 		case configRepoView:
 			return m.handleConfigRepoUpdate(msg)
 		case configRepoInputView:
@@ -177,6 +179,8 @@ func (m Model) View() string {
 			m.renderWatchInput(&body)
 		case watchConfirmDeleteView:
 			m.renderWatchConfirmDelete(&body)
+		case watchCheckInputView, watchApplyInputView:
+			m.renderWatchCommandInput(&body)
 		case configRepoView:
 			m.renderConfigRepo(&body)
 		case configRepoInputView:

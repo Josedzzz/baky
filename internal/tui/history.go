@@ -24,8 +24,9 @@ type previewLoadedMsg struct {
 }
 
 type configRestoredMsg struct {
-	path string
-	err  error
+	path   string
+	output string // what the validation and apply commands printed
+	err    error
 }
 
 // loadCommitsCmd reads the config backups recorded in the repository
@@ -44,7 +45,7 @@ func loadPreviewCmd(cb config.ConfigBackup, commit gitbackup.Commit) tea.Cmd {
 	return func() tea.Msg {
 		watches := make([]gitbackup.Watch, len(cb.Watches))
 		for i, w := range cb.Watches {
-			watches[i] = gitbackup.Watch{Source: w.Source, Dest: w.Dest}
+			watches[i] = gitbackup.Watch{Source: w.Source, Dest: w.Dest, Check: w.Check, Apply: w.Apply}
 		}
 		preview, err := gitbackup.PreviewRestore(cb.RepoDir, watches, commit)
 		return previewLoadedMsg{preview: preview, err: err}
@@ -54,7 +55,8 @@ func loadPreviewCmd(cb config.ConfigBackup, commit gitbackup.Commit) tea.Cmd {
 // restoreConfigCmd writes the version being previewed to the watched file
 func restoreConfigCmd(preview *gitbackup.Preview) tea.Cmd {
 	return func() tea.Msg {
-		return configRestoredMsg{path: preview.LivePath, err: preview.Restore()}
+		output, err := preview.Restore()
+		return configRestoredMsg{path: preview.LivePath, output: output, err: err}
 	}
 }
 
@@ -181,8 +183,14 @@ func (m Model) handleConfigDiffUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleConfigRestoreConfirmUpdate asks before the watched file is overwritten
 func (m Model) handleConfigRestoreConfirmUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// A restore is running: ignore every key until it finishes
+	if m.configRestoring {
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "y", "s":
+		m.configRestoring = true
 		return m, restoreConfigCmd(m.preview)
 	case "n", "esc":
 		m.state = configDiffView
@@ -192,9 +200,13 @@ func (m Model) handleConfigRestoreConfirmUpdate(msg tea.KeyMsg) (tea.Model, tea.
 
 // handleConfigRestored reports the result of a restore and returns to the history
 func (m Model) handleConfigRestored(msg configRestoredMsg) (tea.Model, tea.Cmd) {
+	m.configRestoring = false
 	if msg.err != nil {
 		m.state = configDiffView
-		m.message = "No se pudo restaurar: " + msg.err.Error()
+		m.message = "No se restauró nada: " + msg.err.Error()
+		if msg.output != "" {
+			m.message += "\n" + lastOutputLines(msg.output, 6)
+		}
 		m.isSuccess = false
 		return m, nil
 	}
@@ -249,9 +261,13 @@ func (m Model) renderConfigHistory(body *strings.Builder) {
 		for i := m.commitsOffset; i < len(m.commits) && i < m.commitsOffset+visible; i++ {
 			c := m.commits[i]
 			line := fmt.Sprintf("%s  %s  %s", c.Date, c.Hash, c.Message)
-			if m.commitsCursor == i {
+			switch {
+			case m.commitsCursor == i:
 				body.WriteString(selectedItemStyle.Render(line) + "\n")
-			} else {
+			case c.Invalid:
+				// The configuration did not pass its validation at this point
+				body.WriteString(itemStyle.Render(diffRemovedStyle.Render(line)) + "\n")
+			default:
 				body.WriteString(itemStyle.Render(line) + "\n")
 			}
 		}
@@ -270,6 +286,13 @@ func (m Model) renderConfigDiff(body *strings.Builder) {
 	c := m.selectedCommit
 	body.WriteString(headerStyle.Render("Cambio:  ") + c.Hash + "  " + c.Date + "\n")
 	body.WriteString(headerStyle.Render("Detalle: ") + c.Message + "\n")
+
+	if c.Invalid {
+		body.WriteString(errorStyle.Render("Este cambio no pasó la validación cuando se respaldó.") + "\n")
+		if m.preview != nil && m.preview.CheckOutput != "" {
+			body.WriteString(mutedStyle.Render(lastOutputLines(m.preview.CheckOutput, 4)) + "\n")
+		}
+	}
 
 	footer := "esc: volver"
 	switch {
@@ -327,8 +350,25 @@ func (m Model) renderConfigRestoreConfirm(body *strings.Builder) {
 	body.WriteString(headerStyle.Render("Cambios: ") +
 		diffRemovedStyle.Render(countLines(removed, "se quita", "se quitan")) + ", " +
 		diffAddedStyle.Render(countLines(added, "vuelve", "vuelven")) + "\n\n")
+	// What will run before the file is written
+	watch := m.preview.Watch
+	if watch.Check != "" || watch.Apply != "" {
+		body.WriteString(headerStyle.Render("Antes de escribir el archivo, sobre una copia temporal:") + "\n")
+		if watch.Check != "" {
+			body.WriteString("  1. Validar:  " + watch.Check + "\n")
+		}
+		if watch.Apply != "" {
+			body.WriteString("  2. Aplicar:  " + watch.Apply + "\n")
+		}
+		body.WriteString(mutedStyle.Render("Si alguno falla, no se restaura nada.") + "\n\n")
+	}
+
 	body.WriteString(mutedStyle.Render("Con el servicio activo, el contenido actual ya está respaldado en el\nhistorial y la restauración queda registrada como un cambio nuevo.") + "\n")
 
+	if m.configRestoring {
+		body.WriteString("\n" + processingStyle.Render("Validando y restaurando... Por favor espere.") + "\n")
+		return
+	}
 	body.WriteString(footerStyle.Render("\ns/y: restaurar • n/esc: cancelar"))
 }
 
@@ -338,4 +378,13 @@ func countLines(n int, singular, plural string) string {
 		return "1 línea " + singular
 	}
 	return fmt.Sprintf("%d líneas %s", n, plural)
+}
+
+// lastOutputLines keeps the end of a command output, where the error usually is
+func lastOutputLines(output string, n int) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }

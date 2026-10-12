@@ -367,3 +367,29 @@ func TestRestorePreviewAndFileDiff(t *testing.T) {
 		t.Errorf("expected the temporary copy to be removed")
 	}
 }
+
+func TestEditWatchCommands(t *testing.T) {
+	m := newTestModel(t)
+	source := filepath.Join(t.TempDir(), "shorewall")
+	os.MkdirAll(source, 0o755)
+	config.AddWatch(source, "firewall")
+
+	m.state = watchesView
+	m.reloadConfigBackup()
+	assertShows(t, m, "Validación: ", "Aplicación: ", "(ninguna)")
+
+	// A command without {dir} is rejected
+	m = press(t, m, "c", "shorewall check", "enter")
+	assertShows(t, m, "Paso 1 de 2", "debe incluir {dir}")
+
+	m = press(t, m, " {dir}", "enter")
+	assertShows(t, m, "Paso 2 de 2")
+	m = press(t, m, "shorewall try {dir}", "enter")
+	assertShows(t, m, "CARPETAS VIGILADAS", "Comandos guardados",
+		"Validación: shorewall check {dir}", "Aplicación: shorewall try {dir}")
+
+	cb, _ := config.GetConfigBackup()
+	if cb.Watches[0].Check != "shorewall check {dir}" || cb.Watches[0].Apply != "shorewall try {dir}" {
+		t.Errorf("commands not saved: %+v", cb.Watches[0])
+	}
+}

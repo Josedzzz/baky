@@ -28,6 +28,7 @@ var helpSections = []struct {
 	}},
 	{"Respaldo de configuraciones", [][2]string{
 		{"a / d", "agregar una carpeta vigilada o dejar de vigilarla"},
+		{"c", "definir los comandos que validan y aplican una carpeta"},
 		{"e / t", "editar o probar el repositorio"},
 		{"enter", "en el historial: comparar el archivo actual con esa versión"},
 		{"r", "refrescar el historial / restaurar la versión comparada"},

@@ -137,7 +137,7 @@ func startEngines(ctx context.Context, s settings, logger *logging.Logger) (stop
 			Log:     logger.Log,
 		}
 		for _, w := range s.ConfigBackup.Watches {
-			opts.Watches = append(opts.Watches, gitbackup.Watch{Source: w.Source, Dest: w.Dest})
+			opts.Watches = append(opts.Watches, gitbackup.Watch{Source: w.Source, Dest: w.Dest, Check: w.Check, Apply: w.Apply})
 		}
 
 		backuper, err := gitbackup.New(opts)

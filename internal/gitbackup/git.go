@@ -77,14 +77,28 @@ func pendingChanges(repoDir, dir string) ([]change, error) {
 	return changes, nil
 }
 
-// commitPath commits the current state of one path, and nothing else
-func commitPath(repoDir, path, message string) error {
+// commitPath commits the current state of one path, and nothing else.
+// body is optional extra text for the commit message.
+func commitPath(repoDir, path, message, body string) error {
 	if _, err := git(repoDir, "add", "-A", "--", path); err != nil {
 		return err
 	}
-	args := append(identityArgs(repoDir), "commit", "-m", message, "--", path)
+	args := append(identityArgs(repoDir), "commit", "-m", message)
+	if body != "" {
+		args = append(args, "-m", body)
+	}
+	args = append(args, "--", path)
 	_, err := git(repoDir, args...)
 	return err
+}
+
+// commitBody returns the text below the first line of a commit message
+func commitBody(repoDir, hash string) string {
+	out, err := git(repoDir, "show", "-s", "--format=%b", hash)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
 }
 
 // identityArgs returns the options that give the commit an author when
@@ -132,6 +146,9 @@ type Commit struct {
 	Date    string
 	Message string
 	Path    string // The file the commit changed, relative to the repository
+	// Invalid is true when the configuration did not pass the validation
+	// command of its watch at the time of the commit
+	Invalid bool
 }
 
 const (
@@ -170,6 +187,7 @@ func History(repoDir string, n int) ([]Commit, error) {
 			continue
 		}
 		commit := Commit{Hash: parts[0], Date: parts[1], Message: parts[2]}
+		commit.Invalid = strings.HasSuffix(commit.Message, invalidMarker)
 		// Each automatic commit changes exactly one file
 		for _, line := range lines[1:] {
 			if line = strings.TrimSpace(line); line != "" {
