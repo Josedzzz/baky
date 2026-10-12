@@ -62,6 +62,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commitsLoadedMsg:
 		return m.handleCommitsLoaded(msg)
 
+	case previewLoadedMsg:
+		return m.handlePreviewLoaded(msg)
+
+	case configRestoredMsg:
+		return m.handleConfigRestored(msg)
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -99,6 +105,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleConfigRepoInputUpdate(msg)
 		case configHistoryView:
 			return m.handleConfigHistoryUpdate(msg)
+		case configDiffView:
+			return m.handleConfigDiffUpdate(msg)
+		case configRestoreConfirmView:
+			return m.handleConfigRestoreConfirmUpdate(msg)
 		case serviceStatusView:
 			return m.handleServiceStatusUpdate(msg)
 		case logsView:
@@ -157,6 +167,10 @@ func (m Model) View() string {
 			m.renderConfigRepoInput(&body)
 		case configHistoryView:
 			m.renderConfigHistory(&body)
+		case configDiffView:
+			m.renderConfigDiff(&body)
+		case configRestoreConfirmView:
+			m.renderConfigRestoreConfirm(&body)
 		case serviceStatusView:
 			m.renderServiceStatus(&body)
 		case logsView:
@@ -202,7 +216,13 @@ func (m *Model) resizeViewports() {
 	}
 
 	m.logsView.Width, m.logsView.Height = width, height
-	m.commitsView.Width, m.commitsView.Height = width, height
+
+	// The diff screen shows the commit and a legend above the changes
+	diffHeight := height - 7
+	if diffHeight < 3 {
+		diffHeight = 3
+	}
+	m.diffView.Width, m.diffView.Height = width, diffHeight
 }
 
 // reloadPaths refreshes the file backup settings from the config

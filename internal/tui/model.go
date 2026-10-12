@@ -73,6 +73,12 @@ const (
 	// configHistoryView shows the config backups already made (commits)
 	configHistoryView
 
+	// configDiffView compares the current file with its version in a commit
+	configDiffView
+
+	// configRestoreConfirmView asks for confirmation before a file is restored
+	configRestoreConfirmView
+
 	// serviceStatusView shows the daemon service and lets the user start or stop it
 	serviceStatusView
 
@@ -124,7 +130,15 @@ type Model struct {
 	pendingSource string          // folder typed in the first step of adding a watch
 	commits       []gitbackup.Commit
 	commitsErr    string
-	commitsView   viewport.Model
+	commitsCursor int // cursor for the history list
+	commitsOffset int // for scrolling the history list
+
+	// Restore of a config file from the history
+	selectedCommit gitbackup.Commit   // commit chosen in the history
+	preview        *gitbackup.Preview // what restoring it would change
+	previewErr     string
+	previewLoading bool
+	diffView       viewport.Model
 
 	// Service fields
 	service        service.State
@@ -172,7 +186,7 @@ func NewModel() Model {
 		history:         history,
 		allBackups:      []restore.BackupInfo{},
 		configBackup:    configBackup,
-		commitsView:     viewport.New(0, 0),
+		diffView:        viewport.New(0, 0),
 		logsView:        viewport.New(0, 0),
 	}
 	if warning := config.Warning(); warning != "" {

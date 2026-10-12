@@ -104,6 +104,11 @@ var (
 			Foreground(grayColor).
 			Italic(true)
 
+	// Diff styles: what a restore would remove from and bring back to a file
+	diffRemovedStyle = lipgloss.NewStyle().Foreground(errorColor)
+	diffAddedStyle   = lipgloss.NewStyle().Foreground(okColor)
+	diffHunkStyle    = lipgloss.NewStyle().Foreground(primaryColor).Bold(true)
+
 	// Daemon log line styles, by level
 	logWarnStyle  = lipgloss.NewStyle().Foreground(warnColor)
 	logErrorStyle = lipgloss.NewStyle().Foreground(errorColor)

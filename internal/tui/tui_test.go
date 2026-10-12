@@ -2,11 +2,13 @@ package tui
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Josedzzz/baky/internal/config"
+	"github.com/Josedzzz/baky/internal/gitbackup"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -190,4 +192,86 @@ func TestLogsScreen(t *testing.T) {
 		"2026-07-24 21:46:17 [ERROR] Fallo al hacer push.",
 	}})
 	assertShows(t, updated.(Model), "Commit realizado", "Fallo al hacer push")
+}
+
+func TestRestoreConfigFromHistory(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	m := newTestModel(t)
+
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	source := filepath.Join(root, "firewall")
+	live := filepath.Join(source, "reglas.conf")
+	os.MkdirAll(repo, 0o755)
+	os.MkdirAll(source, 0o755)
+	for _, args := range [][]string{
+		{"init", "--quiet", "--initial-branch=main"},
+		{"config", "user.name", "Test"},
+		{"config", "user.email", "test@example.com"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	config.SaveConfigRepo(repo)
+	config.AddWatch(source, "firewall")
+
+	// Two versions of the file in the history
+	backuper, err := gitbackup.New(gitbackup.Options{RepoDir: repo, Watches: []gitbackup.Watch{{Source: source, Dest: "firewall"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(live, []byte("regla 1\nregla 2\n"), 0o644)
+	backuper.SyncAll()
+	os.WriteFile(live, []byte("regla 1\nregla ROTA\n"), 0o644)
+	backuper.SyncAll()
+
+	// run executes the command a key press returned and feeds its result back
+	run := func(m Model, key string) Model {
+		t.Helper()
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+		if key == "enter" {
+			msg = tea.KeyMsg{Type: tea.KeyEnter}
+		}
+		updated, cmd := m.Update(msg)
+		if cmd == nil {
+			t.Fatalf("expected %q to start a command", key)
+		}
+		updated, _ = updated.(Model).Update(cmd())
+		return updated.(Model)
+	}
+
+	// Open the history from the config menu
+	m.state, m.cursor = configMenuView, 1
+	m = run(m, "enter")
+	assertShows(t, m, "HISTORIAL DE CAMBIOS", "actualizado reglas.conf", "[Cambio 1 de 2]")
+
+	// The newest change is what the file already has
+	m = run(m, "enter")
+	assertShows(t, m, "CAMBIOS A RESTAURAR", live, "ya es igual a esta versión")
+	if m = press(t, m, "r"); m.state != configDiffView {
+		t.Errorf("nothing to restore: r must do nothing")
+	}
+
+	// The older change shows what restoring it would do
+	m = press(t, m, "esc", "down")
+	m = run(m, "enter")
+	assertShows(t, m, "Cambios desde la línea 1 del archivo actual", "- regla ROTA", "+ regla 2", "r: restaurar esta versión")
+
+	// Cancelling keeps the file; confirming restores it
+	m = press(t, m, "r")
+	assertShows(t, m, "CONFIRMAR RESTAURACIÓN", "1 línea se quita", "1 línea vuelve")
+	m = press(t, m, "n")
+	if got, _ := os.ReadFile(live); string(got) != "regla 1\nregla ROTA\n" {
+		t.Fatalf("cancelling must not change the file, got %q", got)
+	}
+
+	m = press(t, m, "r")
+	m = run(m, "s")
+	assertShows(t, m, "HISTORIAL DE CAMBIOS", "restaurado")
+	if got, _ := os.ReadFile(live); string(got) != "regla 1\nregla 2\n" {
+		t.Errorf("expected the old version to be restored, got %q", got)
+	}
 }

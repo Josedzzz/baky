@@ -28,7 +28,8 @@ var helpSections = []struct {
 	{"Respaldo de configuraciones", [][2]string{
 		{"a / d", "agregar una carpeta vigilada o dejar de vigilarla"},
 		{"e / t", "editar o probar el repositorio"},
-		{"r", "refrescar el historial"},
+		{"enter", "en el historial: comparar el archivo actual con esa versión"},
+		{"r", "refrescar el historial / restaurar la versión comparada"},
 	}},
 	{"Servicio", [][2]string{
 		{"i / d / r", "iniciar, detener o reiniciar el servicio"},

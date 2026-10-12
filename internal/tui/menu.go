@@ -137,6 +137,8 @@ func (m Model) open(target sessionState) (tea.Model, tea.Cmd) {
 		m.reloadConfigBackup()
 	case configHistoryView:
 		m.reloadConfigBackup()
+		m.commitsCursor = 0
+		m.commitsOffset = 0
 		return m, loadCommitsCmd(m.configBackup.RepoDir)
 	case serviceStatusView:
 		m.serviceLoading = true
