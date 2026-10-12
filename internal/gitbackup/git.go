@@ -131,19 +131,27 @@ type Commit struct {
 	Hash    string
 	Date    string
 	Message string
+	Path    string // The file the commit changed, relative to the repository
 }
 
-const commitSeparator = "|||"
+const (
+	commitSeparator = "|||"
+	// commitMarker starts each commit in the output of "git log", where
+	// the file names follow the commit line
+	commitMarker = "\x01"
+)
 
 // History returns the last n automatic backups recorded in the repository,
 // newest first
 func History(repoDir string, n int) ([]Commit, error) {
-	format := "%h" + commitSeparator + "%ad" + commitSeparator + "%s"
+	format := commitMarker + "%h" + commitSeparator + "%ad" + commitSeparator + "%s"
 	out, err := git(repoDir,
+		"-c", "core.quotePath=false",
 		"log",
 		"-n", strconv.Itoa(n),
 		"--grep=^"+commitPrefix,
 		"--date=format:%Y-%m-%d %H:%M:%S",
+		"--name-only",
 		"--pretty=format:"+format,
 	)
 	if err != nil {
@@ -155,12 +163,21 @@ func History(repoDir string, n int) ([]Commit, error) {
 	}
 
 	var commits []Commit
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		parts := strings.SplitN(line, commitSeparator, 3)
+	for _, entry := range strings.Split(out, commitMarker) {
+		lines := strings.Split(strings.TrimSpace(entry), "\n")
+		parts := strings.SplitN(lines[0], commitSeparator, 3)
 		if len(parts) != 3 {
 			continue
 		}
-		commits = append(commits, Commit{Hash: parts[0], Date: parts[1], Message: parts[2]})
+		commit := Commit{Hash: parts[0], Date: parts[1], Message: parts[2]}
+		// Each automatic commit changes exactly one file
+		for _, line := range lines[1:] {
+			if line = strings.TrimSpace(line); line != "" {
+				commit.Path = line
+				break
+			}
+		}
+		commits = append(commits, commit)
 	}
 	return commits, nil
 }
