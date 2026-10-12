@@ -6,6 +6,7 @@ import (
 
 	"github.com/Josedzzz/baky/internal/config"
 	"github.com/Josedzzz/baky/internal/gitbackup"
+	"github.com/Josedzzz/baky/internal/textdiff"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -208,23 +209,23 @@ func (m Model) handleConfigRestored(msg configRestoredMsg) (tea.Model, tea.Cmd) 
 
 // renderDiffLines formats a comparison: where each group of changes
 // starts, what would be removed and what would come back
-func renderDiffLines(lines []gitbackup.DiffLine) string {
+func renderDiffLines(lines []textdiff.Line) string {
 	rendered := make([]string, 0, len(lines))
 	for i, line := range lines {
 		// Tabs would break the alignment inside the scrolling area
 		text := strings.ReplaceAll(line.Text, "\t", "    ")
 
 		switch line.Kind {
-		case gitbackup.DiffHunk:
+		case textdiff.Hunk:
 			if i > 0 {
 				rendered = append(rendered, "")
 			}
-			rendered = append(rendered, diffHunkStyle.Render(fmt.Sprintf("── Cambios desde la línea %d del archivo actual ──", line.Line)))
-		case gitbackup.DiffRemoved:
+			rendered = append(rendered, diffHunkStyle.Render(fmt.Sprintf("── Cambios desde la línea %d del archivo actual ──", line.Number)))
+		case textdiff.Removed:
 			rendered = append(rendered, diffRemovedStyle.Render("- "+text))
-		case gitbackup.DiffAdded:
+		case textdiff.Added:
 			rendered = append(rendered, diffAddedStyle.Render("+ "+text))
-		case gitbackup.DiffNote:
+		case textdiff.Note:
 			rendered = append(rendered, mutedStyle.Render(text))
 		default:
 			rendered = append(rendered, mutedStyle.Render("  "+text))
@@ -314,9 +315,9 @@ func (m Model) renderConfigRestoreConfirm(body *strings.Builder) {
 	removed, added := 0, 0
 	for _, line := range m.preview.Lines {
 		switch line.Kind {
-		case gitbackup.DiffRemoved:
+		case textdiff.Removed:
 			removed++
-		case gitbackup.DiffAdded:
+		case textdiff.Added:
 			added++
 		}
 	}

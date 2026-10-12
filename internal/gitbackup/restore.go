@@ -4,37 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
+
+	"github.com/Josedzzz/baky/internal/textdiff"
 )
-
-// DiffKind tells what a line of a comparison means
-type DiffKind int
-
-const (
-	// DiffContext is a line that is the same in both versions
-	DiffContext DiffKind = iota
-	// DiffRemoved is a line of the current file that the other version does not have
-	DiffRemoved
-	// DiffAdded is a line of the other version that the current file does not have
-	DiffAdded
-	// DiffHunk marks where a group of changes starts
-	DiffHunk
-	// DiffNote is a remark from Git, such as a binary file or a missing final newline
-	DiffNote
-)
-
-// DiffLine is one line of a comparison between two versions of a file
-type DiffLine struct {
-	Kind DiffKind
-	Text string
-	// Line is the line number in the current file where the group of
-	// changes starts. Only set for DiffHunk.
-	Line int
-}
 
 // Preview describes what restoring a file to the version of a commit would do
 type Preview struct {
@@ -51,7 +25,7 @@ type Preview struct {
 
 	// Lines goes from the current file to the version of the commit:
 	// removed lines would disappear, added lines would come back.
-	Lines []DiffLine
+	Lines []textdiff.Line
 }
 
 // LivePath returns the watched file that a path of the repository backs up
@@ -112,15 +86,15 @@ func PreviewRestore(repoDir string, watches []Watch, commit Commit) (*Preview, e
 		return preview, nil
 	}
 
-	preview.Lines, err = diff(livePath, preview.LiveExists, content)
+	preview.Lines, err = diffContent(livePath, content)
 	if err != nil {
 		return nil, err
 	}
 	return preview, nil
 }
 
-// diff returns the changes that turn the file at currentPath into wanted
-func diff(currentPath string, currentExists bool, wanted []byte) ([]DiffLine, error) {
+// diffContent returns the changes that turn the file at currentPath into wanted
+func diffContent(currentPath string, wanted []byte) ([]textdiff.Line, error) {
 	tmp, err := os.CreateTemp("", "baky-diff-*")
 	if err != nil {
 		return nil, err
@@ -134,52 +108,7 @@ func diff(currentPath string, currentExists bool, wanted []byte) ([]DiffLine, er
 	if err := tmp.Close(); err != nil {
 		return nil, err
 	}
-
-	if !currentExists {
-		currentPath = os.DevNull
-	}
-
-	// --no-index compares two files outside of any repository
-	cmd := exec.Command("git", "diff", "--no-index", "--no-color", "--unified=3", "--", currentPath, tmp.Name())
-	out, err := cmd.Output()
-	if err != nil {
-		// Exit code 1 only means "the files differ"
-		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
-			return nil, fmt.Errorf("no se pudo comparar el archivo: %w", err)
-		}
-	}
-	return parseDiff(string(out)), nil
-}
-
-// hunkHeader matches "@@ -12,7 +12,8 @@" and captures the first line number
-var hunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@`)
-
-// parseDiff turns the unified diff printed by Git into lines ready to show
-func parseDiff(out string) []DiffLine {
-	var lines []DiffLine
-	inHunk := false
-
-	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
-		switch {
-		case hunkHeader.MatchString(line):
-			inHunk = true
-			number, _ := strconv.Atoi(hunkHeader.FindStringSubmatch(line)[1])
-			lines = append(lines, DiffLine{Kind: DiffHunk, Line: number})
-		case strings.HasPrefix(line, "Binary files"):
-			lines = append(lines, DiffLine{Kind: DiffNote, Text: "El archivo es binario: no se puede mostrar línea por línea."})
-		case !inHunk:
-			// Header of the diff (file names, modes): not useful here
-		case strings.HasPrefix(line, "+"):
-			lines = append(lines, DiffLine{Kind: DiffAdded, Text: line[1:]})
-		case strings.HasPrefix(line, "-"):
-			lines = append(lines, DiffLine{Kind: DiffRemoved, Text: line[1:]})
-		case strings.HasPrefix(line, `\`):
-			lines = append(lines, DiffLine{Kind: DiffNote, Text: "(sin salto de línea al final del archivo)"})
-		default:
-			lines = append(lines, DiffLine{Kind: DiffContext, Text: strings.TrimPrefix(line, " ")})
-		}
-	}
-	return lines
+	return textdiff.Files(currentPath, tmp.Name())
 }
 
 // Restore writes the version of the preview to the watched file. The file

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Josedzzz/baky/internal/textdiff"
 )
 
 func (e *env) watches() []Watch {
@@ -76,12 +78,12 @@ func TestPreviewAndRestoreAnOlderVersion(t *testing.T) {
 	hunkLine := 0
 	for _, line := range preview.Lines {
 		switch line.Kind {
-		case DiffRemoved:
+		case textdiff.Removed:
 			removed = append(removed, line.Text)
-		case DiffAdded:
+		case textdiff.Added:
 			added = append(added, line.Text)
-		case DiffHunk:
-			hunkLine = line.Line
+		case textdiff.Hunk:
+			hunkLine = line.Number
 		}
 	}
 	if strings.Join(removed, "|") != "regla CAMBIADA|regla 4" {
@@ -145,7 +147,7 @@ func TestPreviewWhenTheFileWasDeleted(t *testing.T) {
 	if preview.LiveExists || preview.Identical {
 		t.Fatalf("unexpected preview: %+v", preview)
 	}
-	if len(preview.Lines) != 2 || preview.Lines[1].Kind != DiffAdded || preview.Lines[1].Text != "vpn" {
+	if len(preview.Lines) != 2 || preview.Lines[1].Kind != textdiff.Added || preview.Lines[1].Text != "vpn" {
 		t.Errorf("expected the whole file as added lines, got %+v", preview.Lines)
 	}
 	if err := preview.Restore(); err != nil {
