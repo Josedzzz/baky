@@ -49,6 +49,12 @@ const (
 	// selectRestoreActionView is the state where the user selects action for conflicts
 	selectRestoreActionView
 
+	// restorePreviewView lists what restoring the backup would change
+	restorePreviewView
+
+	// restoreFileDiffView compares one file of the backup with the current one
+	restoreFileDiffView
+
 	// restoreInputView is a sub-state for when the user is typing a restore path
 	restoreInputView
 
@@ -120,6 +126,16 @@ type Model struct {
 	restoreAction      restore.RestoreAction
 	restoreActionIndex int // For selecting action (overwrite/rename/skip)
 	isRestoring        bool
+
+	// Restore preview fields
+	restorePreview        *restore.Preview // what the restore would change
+	restorePreviewErr     string
+	restorePreviewLoading bool
+	previewCursor         int // cursor for the list of files
+	previewOffset         int // for scrolling the list of files
+	fileDiffErr           string
+	fileDiffLoading       bool
+	fileDiffEmpty         bool // the comparison found no differences to show
 
 	// Config backup fields
 	configBackup  config.ConfigBackup

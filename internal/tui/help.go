@@ -24,6 +24,7 @@ var helpSections = []struct {
 		{"f", "cambiar la frecuencia: diario, semanal, al cambiar"},
 		{"enter", "respaldar la ruta seleccionada / restaurar un respaldo"},
 		{"o / c", "restaurar en la ubicación original o en otra ruta"},
+		{"enter / r", "antes de restaurar: ver las diferencias de un archivo / continuar"},
 	}},
 	{"Respaldo de configuraciones", [][2]string{
 		{"a / d", "agregar una carpeta vigilada o dejar de vigilarla"},

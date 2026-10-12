@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Josedzzz/baky/internal/backup"
 	"github.com/Josedzzz/baky/internal/config"
 	"github.com/Josedzzz/baky/internal/gitbackup"
 	tea "github.com/charmbracelet/bubbletea"
@@ -273,5 +274,96 @@ func TestRestoreConfigFromHistory(t *testing.T) {
 	assertShows(t, m, "HISTORIAL DE CAMBIOS", "restaurado")
 	if got, _ := os.ReadFile(live); string(got) != "regla 1\nregla 2\n" {
 		t.Errorf("expected the old version to be restored, got %q", got)
+	}
+}
+
+func TestRestorePreviewAndFileDiff(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	m := newTestModel(t)
+
+	root := t.TempDir()
+	source := filepath.Join(root, "docs")
+	nas := filepath.Join(root, "nas")
+	os.MkdirAll(source, 0o755)
+	os.MkdirAll(nas, 0o755)
+	os.WriteFile(filepath.Join(source, "informe.txt"), []byte("linea 1\nlinea 2\n"), 0o644)
+	os.WriteFile(filepath.Join(source, "igual.txt"), []byte("sin cambios\n"), 0o644)
+	os.WriteFile(filepath.Join(source, "borrado.txt"), []byte("volvera\n"), 0o644)
+
+	config.SaveNasPath(nas)
+	config.SavePaths([]config.BackupPathConfig{{Path: source, Frequency: config.FreqDaily}})
+	if err := backup.RunBackup(source); err != nil {
+		t.Fatal(err)
+	}
+
+	// The folder changes after the backup
+	os.WriteFile(filepath.Join(source, "informe.txt"), []byte("linea 1\nlinea CAMBIADA\n"), 0o644)
+	os.Remove(filepath.Join(source, "borrado.txt"))
+	os.WriteFile(filepath.Join(source, "nuevo.txt"), []byte("no esta en el respaldo\n"), 0o644)
+
+	// run executes the command a key press returned and feeds its result back
+	run := func(m Model, key string) Model {
+		t.Helper()
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+		if key == "enter" {
+			msg = tea.KeyMsg{Type: tea.KeyEnter}
+		}
+		updated, cmd := m.Update(msg)
+		if cmd == nil {
+			t.Fatalf("expected %q to start a command", key)
+		}
+		updated, _ = updated.(Model).Update(cmd())
+		return updated.(Model)
+	}
+
+	// Files menu → view backups → select the backup → original location
+	m.state, m.cursor = filesMenuView, 2
+	m = press(t, m, "enter", "enter")
+	assertShows(t, m, "DESTINO DE LA RESTAURACIÓN")
+	m = run(m, "o")
+
+	assertShows(t, m, "CAMBIOS DE LA RESTAURACIÓN",
+		"M se modifican: 1", "+ se crean: 1", "= quedan igual: 1",
+		"informe.txt  (se modifica)", "borrado.txt  (se crea)", "igual.txt  (queda igual)",
+		"Archivos del destino que no están en el respaldo: 1")
+	tempCopy := m.restorePreview.Files[0].BackupPath
+
+	// The modified file is first: enter shows its differences
+	m = run(m, "enter")
+	assertShows(t, m, "DIFERENCIAS DEL ARCHIVO", filepath.Join(source, "informe.txt"),
+		"Cambios desde la línea 1 del archivo actual", "- linea CAMBIADA", "+ linea 2")
+
+	// Back to the list, then on to the restore itself
+	m = press(t, m, "esc")
+	assertShows(t, m, "CAMBIOS DE LA RESTAURACIÓN")
+	m = press(t, m, "r")
+	assertShows(t, m, "ARCHIVOS EXISTENTES", "Sobrescribir")
+	if m = press(t, m, "esc"); m.state != restorePreviewView {
+		t.Errorf("expected esc to return to the preview, got state %d", m.state)
+	}
+
+	m = press(t, m, "r")
+	m = run(m, "enter")
+	assertShows(t, m, "VER RESPALDOS", "Se restauraron 3 archivos")
+
+	// The restore brought the backup back and kept the unrelated file
+	for name, want := range map[string]string{
+		"informe.txt": "linea 1\nlinea 2\n",
+		"borrado.txt": "volvera\n",
+		"nuevo.txt":   "no esta en el respaldo\n",
+	} {
+		if got, _ := os.ReadFile(filepath.Join(source, name)); string(got) != want {
+			t.Errorf("%s: expected %q, got %q", name, want, got)
+		}
+	}
+
+	// The temporary copy of the backup is gone
+	if m.restorePreview != nil {
+		t.Errorf("expected the preview to be closed after the restore")
+	}
+	if _, err := os.Stat(tempCopy); !os.IsNotExist(err) {
+		t.Errorf("expected the temporary copy to be removed")
 	}
 }

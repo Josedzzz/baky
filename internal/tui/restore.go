@@ -43,6 +43,8 @@ func (m Model) handleRestoreFinished(msg restoreFinishedMsg) (tea.Model, tea.Cmd
 		)
 	}
 
+	m.closeRestorePreview()
+
 	// Refresh backup list and keep the result message
 	m.loadBackups()
 	m.message = message
@@ -151,9 +153,7 @@ func (m Model) handleSelectRestoreDestUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd
 	case "o":
 		// Use original source path
 		m.restorePath = m.selectedBackup.SourcePath
-		m.state = selectRestoreActionView
-		m.restoreActionIndex = 0
-		m.message = ""
+		return m.startRestorePreview()
 	case "c":
 		// Choose custom path
 		m.state = restoreInputView
@@ -203,7 +203,7 @@ func (m Model) handleSelectRestoreActionUpdate(msg tea.KeyMsg) (tea.Model, tea.C
 			return restoreFinishedMsg{result: result, err: err}
 		}
 	case "esc":
-		m.state = selectRestoreDestView
+		m.state = restorePreviewView
 		m.message = ""
 	}
 	return m, nil
@@ -228,10 +228,8 @@ func (m Model) handleRestoreInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.restorePath = path
-			m.state = selectRestoreActionView
-			m.restoreActionIndex = 0
 			m.restoreInput.Reset()
-			m.message = ""
+			return m.startRestorePreview()
 		}
 		return m, nil
 	}

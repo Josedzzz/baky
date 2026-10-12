@@ -43,6 +43,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case restoreFinishedMsg:
 		return m.handleRestoreFinished(msg)
 
+	case restorePreviewLoadedMsg:
+		return m.handleRestorePreviewLoaded(msg)
+
+	case fileDiffLoadedMsg:
+		return m.handleFileDiffLoaded(msg)
+
 	case serviceStateMsg:
 		return m.handleServiceState(msg)
 
@@ -70,6 +76,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			// Do not leave the temporary copy of a backup behind
+			m.restorePreview.Close()
 			return m, tea.Quit
 		}
 		switch m.state {
@@ -89,6 +97,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleSelectRestoreDestUpdate(msg)
 		case selectRestoreActionView:
 			return m.handleSelectRestoreActionUpdate(msg)
+		case restorePreviewView:
+			return m.handleRestorePreviewUpdate(msg)
+		case restoreFileDiffView:
+			return m.handleRestoreFileDiffUpdate(msg)
 		case restoreInputView:
 			return m.handleRestoreInputUpdate(msg)
 		case watchesView:
@@ -155,6 +167,10 @@ func (m Model) View() string {
 			m.renderRestoreInput(&body)
 		case selectRestoreActionView:
 			m.renderSelectRestoreAction(&body)
+		case restorePreviewView:
+			m.renderRestorePreview(&body)
+		case restoreFileDiffView:
+			m.renderRestoreFileDiff(&body)
 		case watchesView:
 			m.renderWatches(&body)
 		case watchSourceInputView, watchDestInputView:
