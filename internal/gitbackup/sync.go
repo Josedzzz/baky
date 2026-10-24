@@ -44,7 +44,11 @@ func evalPath(path string) (string, error) {
 // mirror makes dst an exact copy of src: new and changed files are copied,
 // and files that no longer exist in src are removed from dst. Files that
 // cannot be read are reported and left as they are in dst.
-func mirror(src, dst string, warn func(msg string)) error {
+//
+// What ex excludes, and files that hold a private key, are not copied,
+// and are removed from dst if an earlier copy is there. A nil ex copies
+// everything.
+func mirror(src, dst string, ex *excluder, warn func(msg string)) error {
 	info, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -54,6 +58,7 @@ func mirror(src, dst string, warn func(msg string)) error {
 	}
 
 	// 1. Copy what is new or different
+	secrets := map[string]bool{} // relative paths left out for their content
 	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			warn(fmt.Sprintf("Could not read %s: %v", path, walkErr))
@@ -70,6 +75,13 @@ func mirror(src, dst string, warn func(msg string)) error {
 		target := filepath.Join(dst, rel)
 
 		switch {
+		case rel == ".":
+			return nil
+		case ex.excluded(rel, d.IsDir()):
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		case d.IsDir():
 			return nil
 		case ignored(path):
@@ -79,7 +91,17 @@ func mirror(src, dst string, warn func(msg string)) error {
 				warn(fmt.Sprintf("Could not back up %s: %v", path, err))
 			}
 		case d.Type().IsRegular():
-			if err := copyFile(path, target); err != nil {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				warn(fmt.Sprintf("Could not back up %s: %v", path, err))
+				return nil
+			}
+			if ex.holdsSecret(data) {
+				secrets[rel] = true
+				warn(fmt.Sprintf("Not backed up, it holds a private key: %s", path))
+				return nil
+			}
+			if err := copyFile(path, target, data); err != nil {
 				warn(fmt.Sprintf("Could not back up %s: %v", path, err))
 			}
 		}
@@ -113,6 +135,13 @@ func mirror(src, dst string, warn func(msg string)) error {
 			return nil
 		}
 
+		// A secret backed up before it was excluded leaves the folder, but
+		// stays in the history and on the remote
+		if ex.excluded(rel, false) || secrets[rel] {
+			warn(fmt.Sprintf("Removed %s from the repository because it is excluded. Earlier commits and the remote still hold it: if it is a secret, change it", path))
+			return os.Remove(path)
+		}
+
 		// Only a file that is certainly gone is removed: one that cannot
 		// be checked (permissions, I/O error) keeps its last backup.
 		_, statErr := os.Lstat(filepath.Join(src, rel))
@@ -132,12 +161,9 @@ func mirror(src, dst string, warn func(msg string)) error {
 	return nil
 }
 
-// copyFile copies src to dst unless dst already has the same content
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
+// copyFile writes data, the content of src, to dst with the permissions of
+// src, unless dst already has the same content
+func copyFile(src, dst string, data []byte) error {
 	info, err := os.Stat(src)
 	if err != nil {
 		return err

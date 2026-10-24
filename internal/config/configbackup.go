@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -21,6 +22,9 @@ type WatchConfig struct {
 	// Apply is an optional command that puts the configuration in {dir}
 	// into service safely. It runs when a file is restored.
 	Apply string `json:"apply,omitempty"`
+	// Exclude lists extra patterns of files and folders that are not
+	// backed up, on top of the built-in list of secrets
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 // DirPlaceholder is replaced in the check and apply commands by the
@@ -53,6 +57,58 @@ func SetWatchCommands(source, check, apply string) error {
 			if w.Source == source {
 				cfg.ConfigBackup.Watches[i].Check = check
 				cfg.ConfigBackup.Watches[i].Apply = apply
+				return nil
+			}
+		}
+		return fmt.Errorf("the folder '%s' is not being watched", source)
+	})
+}
+
+// ValidateExclude checks an exclude pattern. It uses the syntax of
+// path.Match and is relative to the watched folder: "*.key" matches a name
+// at any depth, "pki/" only folders, "certs/server.crt" that exact path.
+func ValidateExclude(pattern string) error {
+	glob := strings.TrimSuffix(pattern, "/")
+	switch {
+	case strings.TrimSpace(glob) == "":
+		return fmt.Errorf("the pattern cannot be empty")
+	case strings.HasPrefix(pattern, "/"):
+		return fmt.Errorf("the pattern must be relative to the watched folder: %s", pattern)
+	case strings.Contains(pattern, `\`):
+		return fmt.Errorf("the pattern must use / as separator: %s", pattern)
+	}
+	for _, part := range strings.Split(glob, "/") {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("the pattern must not contain empty, . or .. parts: %s", pattern)
+		}
+	}
+	if _, err := path.Match(glob, ""); err != nil {
+		return fmt.Errorf("invalid pattern %s: %w", pattern, err)
+	}
+	return nil
+}
+
+// SetWatchExcludes sets the extra exclude patterns of a watch. Blank
+// patterns and repeats are dropped.
+func SetWatchExcludes(source string, patterns []string) error {
+	var clean []string
+	seen := map[string]bool{}
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p == "" || seen[p] {
+			continue
+		}
+		if err := ValidateExclude(p); err != nil {
+			return err
+		}
+		seen[p] = true
+		clean = append(clean, p)
+	}
+
+	return update(func(cfg *Config) error {
+		for i, w := range cfg.ConfigBackup.Watches {
+			if w.Source == source {
+				cfg.ConfigBackup.Watches[i].Exclude = clean
 				return nil
 			}
 		}

@@ -76,6 +76,9 @@ const (
 	// watchApplyInputView is a sub-state for typing the apply command of a watch
 	watchApplyInputView
 
+	// watchExcludeInputView is a sub-state for typing the exclude patterns of a watch
+	watchExcludeInputView
+
 	// configRepoView is the state where the user configures the config repository
 	configRepoView
 

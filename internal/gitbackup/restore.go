@@ -185,9 +185,10 @@ func (p *Preview) stage() (string, error) {
 		return "", err
 	}
 
-	// Files that cannot be read are left out: the tool being validated
-	// falls back to its own copy of them
-	if err := mirror(p.Watch.Source, stage, func(string) {}); err != nil {
+	// Nothing is excluded: the tool being validated needs its keys too, and
+	// the stage never leaves the machine. Files that cannot be read are
+	// left out: the tool falls back to its own copy of them.
+	if err := mirror(p.Watch.Source, stage, nil, func(string) {}); err != nil {
 		os.RemoveAll(stage)
 		return "", fmt.Errorf("could not prepare the validation: %w", err)
 	}

@@ -393,3 +393,34 @@ func TestEditWatchCommands(t *testing.T) {
 		t.Errorf("commands not saved: %+v", cb.Watches[0])
 	}
 }
+
+func TestEditWatchExcludes(t *testing.T) {
+	m := newTestModel(t)
+	source := filepath.Join(t.TempDir(), "openvpn")
+	os.MkdirAll(source, 0o755)
+	config.AddWatch(source, "vpn")
+
+	m.state = watchesView
+	m.reloadConfigBackup()
+	assertShows(t, m, "Excluded:   private keys and secrets (built-in list)", "x: excluded files")
+
+	// The built-in list is always shown, and a bad pattern is rejected
+	m = press(t, m, "x")
+	assertShows(t, m, "EXCLUDED FILES", "*.key", "pki/")
+	m = press(t, m, "*.bak, /etc/x", "enter")
+	assertShows(t, m, "EXCLUDED FILES", "must be relative")
+
+	m = press(t, m, "esc", "x", "*.bak, keys/", "enter")
+	assertShows(t, m, "WATCHED FOLDERS", "Excluded files saved", "Excluded:   *.bak, keys/ + private keys and secrets")
+
+	cb, _ := config.GetConfigBackup()
+	if strings.Join(cb.Watches[0].Exclude, " ") != "*.bak keys/" {
+		t.Errorf("excludes not saved: %+v", cb.Watches[0].Exclude)
+	}
+
+	// Editing starts from what is saved
+	m = press(t, m, "x")
+	if m.watchInput.Value() != "*.bak, keys/" {
+		t.Errorf("expected the saved patterns in the input, got %q", m.watchInput.Value())
+	}
+}

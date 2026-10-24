@@ -109,7 +109,17 @@ Do not grant `/usr/bin/install`, `cp`, `tee` or similar commands instead: with a
 
 Keep in mind that `shorewall check` and `shorewall try` run as root on whatever configuration they are given, so whoever controls the service user, or can edit baky's configuration, controls the firewall. Use a dedicated account for baky and protect it like an administrator account.
 
-Do not watch folders that contain private keys (for example `/etc/openvpn` with its PKI): baky backs up every file in the folder and pushes them to the repository.
+### Keep secrets out of the repository
+
+baky never backs up the usual names of keys and secrets (`*.key`, `*.pem`, `pki/`, `private/` and others), or any file that holds a private key. Check that list against what the watched folders hold, and add what is missing with `x` in **Watched folders**: database passwords, API tokens, or files with an unusual name. For example, for `/etc/openvpn` with a password file for the management interface:
+
+```
+*.pass, auth/
+```
+
+After adding a folder, look at the log: every file left out for holding a private key shows up as `Not backed up, it holds a private key`. Then check on the remote that nothing secret got through.
+
+A file that was backed up before it was excluded stays in the history and on the remote. Change that secret, and rewrite the history if it must disappear.
 
 ## 7. Check that it works
 

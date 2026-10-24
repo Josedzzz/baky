@@ -107,6 +107,19 @@ In addition:
 - If the push to the remote fails, the commits stay in the local repository and the push is retried.
 - If a watched folder stops being accessible, what was already backed up is kept.
 
+#### Keeping secrets out of the repository
+
+The config repository is pushed to a remote, so baky never backs up:
+
+- files and folders with the usual names of keys and secrets: `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `shadow`, `gshadow`, `*.secret`, `*.secrets` and the folders `pki/`, `private/` and `secrets/`;
+- any file that holds a private key, whatever its name: PEM and OpenSSH keys, and OpenVPN static keys, including those inlined in a `.conf`. The log says which files were left out.
+
+`x` in *Watched folders* adds more patterns to a folder, separated by commas: `*.bak` matches a name in any subfolder, `keys/` a whole folder, and `certs/server.crt` that path inside the watched folder.
+
+A file that was backed up before it was excluded is removed from the repository, but earlier commits, and the remote, still hold it. If it is a secret, change it. Erasing it from the history needs a rewrite of the repository, with a tool such as `git filter-repo`.
+
+The validation and the restore still see the excluded files: they are read from the watched folder, never from the repository.
+
 #### Validating every change
 
 Each watched folder can have two optional commands, set with `c` in *Watched folders*. `{dir}` is replaced by the folder that holds the configuration:
@@ -222,7 +235,7 @@ They do not use the network or touch the real configuration: each test works in 
 |---|---|
 | `internal/backup` | Creating the `tar.gz` (folders, single file, symlinks) and when a scheduled backup is due |
 | `internal/restore` | Restore with overwrite, rename and skip; damaged backup; single file; preview of the changes |
-| `internal/gitbackup` | Creating, modifying, deleting and renaming files; subfolders; moved folders; temporary files; push failure and retry; validating every change; comparing and restoring an earlier version with prior validation |
+| `internal/gitbackup` | Creating, modifying, deleting and renaming files; subfolders; moved folders; temporary files; push failure and retry; excluded files and secrets; validating every change; comparing and restoring an earlier version with prior validation |
 | `internal/daemon` | The whole service with both engines and a live configuration change |
 | `internal/config` | Saving, history in `state.json`, migrating old configurations, damaged file, watched folders |
 | `internal/tui` | Navigating the menus and the main flows, by sending keys to the model |
@@ -316,7 +329,7 @@ Testing on a real installation (systemd service and remote repository) is in ste
 ## To do
 
 - Backup retention policy (delete the oldest ones automatically).
-- Encryption of the backups and of the config repository.
+- Encryption of the backups and of the config repository, so secrets can be backed up too.
 - Alerts when the service fails.
 - Comparing backup versions from the interface (`internal/restore/diff.go` already computes the differences).
 - Consistent backup of running virtual machines.

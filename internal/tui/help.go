@@ -29,6 +29,7 @@ var helpSections = []struct {
 	{"Config backup", [][2]string{
 		{"a / d", "add a watched folder or stop watching it"},
 		{"c", "set the commands that validate and apply a folder"},
+		{"x", "set the files of a folder that are not backed up"},
 		{"e / t", "edit or test the repository"},
 		{"enter", "in the history: compare the current file with that version"},
 		{"r", "refresh the history / restore the compared version"},

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -219,7 +220,7 @@ func TestConfigBackupWatches(t *testing.T) {
 	if cb.RepoDir != "/var/lib/baky/config-repo" || cb.Branch != DefaultBranch {
 		t.Errorf("unexpected repo settings: %+v", cb)
 	}
-	if len(cb.Watches) != 1 || cb.Watches[0] != (WatchConfig{Source: "/etc/openvpn", Dest: "vpn"}) {
+	if len(cb.Watches) != 1 || !reflect.DeepEqual(cb.Watches[0], WatchConfig{Source: "/etc/openvpn", Dest: "vpn"}) {
 		t.Errorf("unexpected watches: %+v", cb.Watches)
 	}
 
@@ -258,7 +259,7 @@ func TestImportMagitiConfig(t *testing.T) {
 		{Source: "/home/miguel/simulation-configs/firewall", Dest: "firewall"},
 		{Source: "/home/miguel/simulation-configs/vpn", Dest: "vpn"},
 	}
-	if len(cb.Watches) != 3 || cb.Watches[0] != want[0] || cb.Watches[1] != want[1] || cb.Watches[2] != want[2] {
+	if !reflect.DeepEqual(cb.Watches, want) {
 		t.Errorf("unexpected watches: %+v", cb.Watches)
 	}
 	if cb.RepoDir != "" {
@@ -283,7 +284,7 @@ func TestWatchCommands(t *testing.T) {
 	if err := SetWatchCommands("/etc/shorewall", "shorewall check", ""); err == nil {
 		t.Errorf("expected an error for a command without {dir}")
 	}
-	if err := SetWatchCommands("/etc/otro", "x {dir}", ""); err == nil {
+	if err := SetWatchCommands("/etc/other", "x {dir}", ""); err == nil {
 		t.Errorf("expected an error for a folder that is not watched")
 	}
 
@@ -295,7 +296,7 @@ func TestWatchCommands(t *testing.T) {
 		Source: "/etc/shorewall", Dest: "firewall",
 		Check: "sudo -n shorewall check {dir}", Apply: "sudo -n shorewall try {dir}",
 	}
-	if cb.Watches[0] != want {
+	if !reflect.DeepEqual(cb.Watches[0], want) {
 		t.Errorf("unexpected watch: %+v", cb.Watches[0])
 	}
 
@@ -305,5 +306,52 @@ func TestWatchCommands(t *testing.T) {
 	}
 	if cb, _ := GetConfigBackup(); cb.Watches[0].Check != "" || cb.Watches[0].Apply != "" {
 		t.Errorf("expected the commands to be removed: %+v", cb.Watches[0])
+	}
+}
+
+func TestValidateExclude(t *testing.T) {
+	for pattern, valid := range map[string]bool{
+		"*.key":            true,
+		"pki/":             true,
+		"certs/server.crt": true,
+		"":                 false,
+		" ":                false,
+		"/":                false,
+		"/etc/x.key":       false,
+		"../x":             false,
+		"a//b":             false,
+		`keys\a`:           false,
+		"[bad":             false,
+	} {
+		if err := ValidateExclude(pattern); (err == nil) != valid {
+			t.Errorf("%q: expected valid=%v, got %v", pattern, valid, err)
+		}
+	}
+}
+
+func TestWatchExcludes(t *testing.T) {
+	useTempConfig(t)
+	AddWatch("/etc/openvpn", "vpn")
+
+	if err := SetWatchExcludes("/etc/openvpn", []string{"*.bak", "/abs"}); err == nil {
+		t.Errorf("expected an error for an absolute pattern")
+	}
+	if err := SetWatchExcludes("/etc/other", []string{"*.bak"}); err == nil {
+		t.Errorf("expected an error for a folder that is not watched")
+	}
+
+	// Blanks and repeats are dropped
+	if err := SetWatchExcludes("/etc/openvpn", []string{" *.bak ", "", "keys/", "*.bak"}); err != nil {
+		t.Fatal(err)
+	}
+	if cb, _ := GetConfigBackup(); !reflect.DeepEqual(cb.Watches[0].Exclude, []string{"*.bak", "keys/"}) {
+		t.Errorf("unexpected excludes: %+v", cb.Watches[0].Exclude)
+	}
+
+	if err := SetWatchExcludes("/etc/openvpn", nil); err != nil {
+		t.Fatal(err)
+	}
+	if cb, _ := GetConfigBackup(); cb.Watches[0].Exclude != nil {
+		t.Errorf("expected the excludes to be removed: %+v", cb.Watches[0].Exclude)
 	}
 }
