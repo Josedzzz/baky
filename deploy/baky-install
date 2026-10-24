@@ -1,0 +1,108 @@
+#!/bin/sh
+# baky-install DEST
+#
+# Writes standard input to DEST as root, so that baky can restore a
+# configuration into a folder its user cannot write, such as
+# /etc/shorewall. It is the only file command baky runs through sudo.
+#
+# DEST must be inside one of the folders listed, one per line, in
+# /etc/baky/restore-dirs. That list must be owned by root and writable
+# only by root: it is what keeps the service user from writing anywhere
+# else. The content comes from standard input, so the helper never reads
+# a file chosen by the caller.
+#
+# An existing file keeps its owner and mode. A new file takes the owner
+# of its folder and mode 0644. Missing folders below an allowed folder
+# are created.
+#
+# Install with:
+#   sudo install -o root -g root -m 0755 deploy/baky-install /usr/local/sbin/baky-install
+#   sudo install -d -o root -g root -m 0755 /etc/baky
+#   echo /etc/shorewall | sudo tee /etc/baky/restore-dirs > /dev/null
+
+set -eu
+
+ALLOWED=/etc/baky/restore-dirs
+
+fail() {
+	echo "baky-install: $*" >&2
+	exit 1
+}
+
+[ "$#" -eq 1 ] || fail "usage: baky-install DEST < content"
+dest=$1
+
+case $dest in
+/*) ;;
+*) fail "the destination must be an absolute path: $dest" ;;
+esac
+# "." and ".." would only resolve once missing folders are created
+case /$dest/ in
+*/./* | */../*) fail "the destination must not contain . or .. components: $dest" ;;
+esac
+
+name=$(basename -- "$dest")
+case $name in
+. | .. | "") fail "invalid file name: $dest" ;;
+esac
+
+# The list of allowed folders must not be editable by anyone but root
+[ -f "$ALLOWED" ] || fail "$ALLOWED does not exist"
+[ "$(stat -c %u "$ALLOWED")" = 0 ] || fail "$ALLOWED must be owned by root"
+case $(stat -c %A "$ALLOWED") in
+?????w???? | ????????w?) fail "$ALLOWED must be writable only by root" ;;
+esac
+
+# The nearest existing folder above the destination, with symlinks resolved
+parent=$(dirname -- "$dest")
+existing=$parent
+while [ ! -d "$existing" ]; do
+	existing=$(dirname -- "$existing")
+done
+
+# inside_allowed DIR succeeds when DIR, with symlinks resolved, is one of
+# the allowed folders or is below one of them
+inside_allowed() {
+	real=$(realpath -e -- "$1") || return 1
+	while IFS= read -r dir || [ -n "$dir" ]; do
+		case $dir in
+		/*) ;;
+		*) continue ;; # blank lines, comments and relative paths are ignored
+		esac
+		root=$(realpath -e -- "$dir" 2>/dev/null) || continue
+		case $real/ in
+		"$root"/*) return 0 ;;
+		esac
+	done <"$ALLOWED"
+	return 1
+}
+
+inside_allowed "$existing" || fail "$dest is not inside a folder listed in $ALLOWED"
+
+# What is missing is created below a folder that is already allowed, and
+# checked again once it exists
+mkdir -p -- "$parent"
+inside_allowed "$parent" || fail "$dest is not inside a folder listed in $ALLOWED"
+parent=$(realpath -e -- "$parent")
+target=$parent/$name
+
+if [ -L "$target" ]; then
+	fail "$target is a symbolic link"
+elif [ -e "$target" ]; then
+	[ -f "$target" ] || fail "$target is not a regular file"
+	owner=$(stat -c %u:%g "$target")
+	mode=$(stat -c %a "$target")
+else
+	owner=$(stat -c %u:%g "$parent")
+	mode=644
+fi
+
+# Written next to the destination and renamed, so the file is never left
+# half written
+tmp=$(mktemp -- "$parent/.baky-install-XXXXXX")
+trap 'rm -f -- "$tmp"' EXIT
+cat >"$tmp"
+chown -- "$owner" "$tmp"
+chmod -- "$mode" "$tmp"
+mv -f -- "$tmp" "$target"
+trap - EXIT

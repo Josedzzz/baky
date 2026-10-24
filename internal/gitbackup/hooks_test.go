@@ -1,6 +1,7 @@
 package gitbackup
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,11 +249,9 @@ func TestInstallFileFallsBackToSudo(t *testing.T) {
 	var got []string
 	handed := ""
 	original := sudo
-	sudo = func(args ...string) (string, error) {
+	sudo = func(stdin []byte, args ...string) (string, error) {
 		got = args
-		// The file to install is the argument before the destination
-		content, _ := os.ReadFile(args[len(args)-2])
-		handed = string(content)
+		handed = string(stdin)
 		return "", nil
 	}
 	t.Cleanup(func() { sudo = original })
@@ -261,16 +260,18 @@ func TestInstallFileFallsBackToSudo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	joined := strings.Join(got, " ")
-	for _, want := range []string{"-n install -D -m 0640", " -o ", " -g ", " " + path} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("expected %q in the sudo command, got %q", want, joined)
-		}
+	// Only the helper, and only the destination: never a file to read
+	if want := []string{"-n", installHelper, path}; strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("expected the sudo command %q, got %q", want, got)
 	}
 	if handed != "new" {
-		t.Errorf("expected the new content to be handed to sudo, got %q", handed)
+		t.Errorf("expected the new content on the standard input, got %q", handed)
 	}
-	if _, err := os.Stat(got[len(got)-2]); !os.IsNotExist(err) {
-		t.Errorf("expected the temporary copy to be removed")
+
+	sudo = func(stdin []byte, args ...string) (string, error) {
+		return "sudo: a password is required", fmt.Errorf("exit status 1")
+	}
+	if err := installFile(path, []byte("new")); err == nil || !strings.Contains(err.Error(), "a password is required") {
+		t.Errorf("expected the sudo error to be reported, got %v", err)
 	}
 }

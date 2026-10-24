@@ -209,10 +209,15 @@ func (p *Preview) stage() (string, error) {
 	return stage, nil
 }
 
+// installHelper is the root-owned script, installed from
+// deploy/baky-install, that writes a file the current user may not write.
+// It only writes inside the folders listed in /etc/baky/restore-dirs.
+const installHelper = "/usr/local/sbin/baky-install"
+
 // installFile replaces the file at path with content in one step, so it
 // is never left half written, keeping its permissions. When the current
-// user may not write there, the file is installed through sudo, keeping
-// its owner too.
+// user may not write there, the file is installed through sudo with
+// installHelper, which keeps its owner too.
 func installFile(path string, content []byte) error {
 	perm := os.FileMode(0o644)
 	info, statErr := os.Stat(path)
@@ -243,39 +248,19 @@ func installFile(path string, content []byte) error {
 		return err
 	}
 
-	// No permission to write there: hand a temporary copy to sudo
-	tmp, err := os.CreateTemp("", "baky-install-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(content); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-
-	// The file keeps the owner it has; a new file takes the owner of its directory
-	ownerOf := path
-	if statErr != nil {
-		ownerOf = dir
-	}
-	args := []string{"-n", "install", "-D", "-m", fmt.Sprintf("%04o", perm)}
-	if uid, gid, ok := owner(ownerOf); ok {
-		args = append(args, "-o", uid, "-g", gid)
-	}
-	args = append(args, tmp.Name(), path)
-
-	if out, err := sudo(args...); err != nil {
-		return fmt.Errorf("no permission to write %s, and sudo did not allow it: %s", path, lastLines(out, 2))
+	// No permission to write there: the helper writes it as root, with the
+	// content on its standard input so it never reads a file we choose
+	if out, err := sudo(content, "-n", installHelper, path); err != nil {
+		return fmt.Errorf("no permission to write %s, and %s through sudo did not allow it: %s", path, installHelper, lastLines(out, 2))
 	}
 	return nil
 }
 
-// sudo runs a command through sudo and returns what it printed
-var sudo = func(args ...string) (string, error) {
-	out, err := exec.Command("sudo", args...).CombinedOutput()
+// sudo runs a command through sudo with stdin as its standard input and
+// returns what it printed
+var sudo = func(stdin []byte, args ...string) (string, error) {
+	cmd := exec.Command("sudo", args...)
+	cmd.Stdin = bytes.NewReader(stdin)
+	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }

@@ -139,7 +139,7 @@ In *Config backup → Change history* each line is a backed-up change. When you 
 1. It copies the folder to a temporary directory and puts the version to restore there.
 2. It runs the validation on that copy. If it fails, it stops.
 3. It runs the apply command on that copy. If it fails, it stops.
-4. Only then does it write the file to the watched folder, keeping its owner and permissions. If the user cannot write there, it installs the file with `sudo`.
+4. Only then does it write the file to the watched folder, keeping its owner and permissions. If the user cannot write there, it writes the file through `sudo` with the `baky-install` helper, which only writes inside the folders listed in `/etc/baky/restore-dirs`.
 
 The service detects the restore and records it as one more change, so it can also be undone. If the chosen change deleted the file, it holds no version to restore: pick an earlier one.
 
@@ -200,7 +200,7 @@ baky/
 │   ├── watch/             Recursive folder watching (fsnotify)
 │   ├── textdiff/          Line-by-line comparison of two versions of a file
 │   └── tui/               Terminal interface, one file per screen
-├── deploy/                systemd unit and sudoers rule
+├── deploy/                systemd unit, sudoers rule and the baky-install helper
 └── docs/                  Installation and test logs
 ```
 

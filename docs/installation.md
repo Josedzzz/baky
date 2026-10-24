@@ -87,13 +87,27 @@ In **Watched folders**, `c` on a folder sets the command that validates it and t
 | Validation | `sudo -n shorewall check {dir}` |
 | Apply | `sudo -n shorewall try {dir}` |
 
-The service user must be able to run those commands with `sudo` without a password. If it is not already an administrator, the minimal rule is:
+The service user must be able to run those commands with `sudo` without a password.
+
+To restore a file into a root-owned folder such as `/etc/shorewall`, baky also needs to write there as root. It does this only through `baky-install`, a small root-owned helper. The helper writes only inside the folders listed in `/etc/baky/restore-dirs`, keeps the file's owner and mode, and refuses symbolic links and `..` paths. Install it and list the folders that may be restored:
+
+```bash
+sudo install -o root -g root -m 0755 deploy/baky-install /usr/local/sbin/baky-install
+sudo install -d -o root -g root -m 0755 /etc/baky
+echo /etc/shorewall | sudo tee /etc/baky/restore-dirs > /dev/null
+```
+
+`/etc/baky/restore-dirs` takes one absolute folder per line, and must stay owned by root and writable only by root. The helper checks both before writing anything. The helper uses GNU `stat` and `realpath`, which every usual Linux distribution has.
+
+If the service user is not already an administrator, the minimal rule is:
 
 ```
-grid ALL=(root) NOPASSWD: /usr/sbin/shorewall check *, /usr/sbin/shorewall try *, /usr/bin/install
+grid ALL=(root) NOPASSWD: /usr/sbin/shorewall check *, /usr/sbin/shorewall try *, /usr/local/sbin/baky-install
 ```
 
-`install` is needed so that a restore can write to root-owned folders such as `/etc/shorewall`. Keep in mind that whoever can edit baky's configuration decides which commands run with those permissions.
+Do not grant `/usr/bin/install`, `cp`, `tee` or similar commands instead: with any arguments they let the user overwrite any file on the system as root.
+
+Keep in mind that `shorewall check` and `shorewall try` run as root on whatever configuration they are given, so whoever controls the service user, or can edit baky's configuration, controls the firewall. Use a dedicated account for baky and protect it like an administrator account.
 
 Do not watch folders that contain private keys (for example `/etc/openvpn` with its PKI): baky backs up every file in the folder and pushes them to the repository.
 
