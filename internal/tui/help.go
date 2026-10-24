@@ -13,30 +13,30 @@ var helpSections = []struct {
 	keys  [][2]string
 }{
 	{"General", [][2]string{
-		{"↑/↓ o k/j", "navegar"},
-		{"enter", "seleccionar o confirmar"},
-		{"esc", "volver a la pantalla anterior"},
-		{"q", "salir (en los menús)"},
-		{"ctrl+c", "salir desde cualquier pantalla"},
+		{"↑/↓ or k/j", "navigate"},
+		{"enter", "select or confirm"},
+		{"esc", "go back to the previous screen"},
+		{"q", "quit (in the menus)"},
+		{"ctrl+c", "quit from any screen"},
 	}},
-	{"Respaldo de archivos", [][2]string{
-		{"a / e / d", "agregar, editar o eliminar una ruta"},
-		{"f", "cambiar la frecuencia: diario, semanal, al cambiar"},
-		{"enter", "respaldar la ruta seleccionada / restaurar un respaldo"},
-		{"o / c", "restaurar en la ubicación original o en otra ruta"},
-		{"enter / r", "antes de restaurar: ver las diferencias de un archivo / continuar"},
+	{"File backup", [][2]string{
+		{"a / e / d", "add, edit or delete a path"},
+		{"f", "change the frequency: daily, weekly, on change"},
+		{"enter", "back up the selected path / restore a backup"},
+		{"o / c", "restore to the original location or to another path"},
+		{"enter / r", "before restoring: view the differences of a file / continue"},
 	}},
-	{"Respaldo de configuraciones", [][2]string{
-		{"a / d", "agregar una carpeta vigilada o dejar de vigilarla"},
-		{"c", "definir los comandos que validan y aplican una carpeta"},
-		{"e / t", "editar o probar el repositorio"},
-		{"enter", "en el historial: comparar el archivo actual con esa versión"},
-		{"r", "refrescar el historial / restaurar la versión comparada"},
+	{"Config backup", [][2]string{
+		{"a / d", "add a watched folder or stop watching it"},
+		{"c", "set the commands that validate and apply a folder"},
+		{"e / t", "edit or test the repository"},
+		{"enter", "in the history: compare the current file with that version"},
+		{"r", "refresh the history / restore the compared version"},
 	}},
-	{"Servicio", [][2]string{
-		{"i / d / r", "iniciar, detener o reiniciar el servicio"},
-		{"a", "actualizar el estado"},
-		{"pgup/pgdn, fin", "desplazarse por los logs"},
+	{"Service", [][2]string{
+		{"s / x / r", "start, stop or restart the service"},
+		{"u", "update the status"},
+		{"pgup/pgdn, end", "scroll through the logs"},
 	}},
 }
 
@@ -51,7 +51,7 @@ func (m Model) handleHelpUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // renderHelp renders the keyboard shortcuts
 func (m Model) renderHelp(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" AYUDA ") + "\n\n")
+	body.WriteString(titleStyle.Render(" HELP ") + "\n\n")
 
 	for _, section := range helpSections {
 		body.WriteString(headerStyle.Render(section.title) + "\n")
@@ -61,6 +61,6 @@ func (m Model) renderHelp(body *strings.Builder) {
 		body.WriteString("\n")
 	}
 
-	body.WriteString(mutedStyle.Render("Los respaldos automáticos los ejecuta el servicio (baky daemon),\nno esta interfaz: puede cerrarla sin interrumpirlos.") + "\n")
-	body.WriteString(footerStyle.Render("esc: volver"))
+	body.WriteString(mutedStyle.Render("Automatic backups are run by the service (baky daemon), not by\nthis interface: you can close it without interrupting them.") + "\n")
+	body.WriteString(footerStyle.Render("esc: back"))
 }

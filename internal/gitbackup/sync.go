@@ -50,13 +50,13 @@ func mirror(src, dst string, warn func(msg string)) error {
 		return err
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("%s no es un directorio", src)
+		return fmt.Errorf("%s is not a directory", src)
 	}
 
 	// 1. Copy what is new or different
 	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			warn(fmt.Sprintf("No se pudo leer %s: %v", path, walkErr))
+			warn(fmt.Sprintf("Could not read %s: %v", path, walkErr))
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -76,11 +76,11 @@ func mirror(src, dst string, warn func(msg string)) error {
 			return nil
 		case d.Type()&fs.ModeSymlink != 0:
 			if err := copySymlink(path, target); err != nil {
-				warn(fmt.Sprintf("No se pudo respaldar %s: %v", path, err))
+				warn(fmt.Sprintf("Could not back up %s: %v", path, err))
 			}
 		case d.Type().IsRegular():
 			if err := copyFile(path, target); err != nil {
-				warn(fmt.Sprintf("No se pudo respaldar %s: %v", path, err))
+				warn(fmt.Sprintf("Could not back up %s: %v", path, err))
 			}
 		}
 		return nil

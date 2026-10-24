@@ -94,19 +94,19 @@ func (m Model) handleServiceStatusUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "i":
+	case "s":
 		m.serviceLoading = true
 		m.message = ""
-		return m, serviceActionCmd(service.Start, "Servicio iniciado.")
-	case "d":
+		return m, serviceActionCmd(service.Start, "Service started.")
+	case "x":
 		m.serviceLoading = true
 		m.message = ""
-		return m, serviceActionCmd(service.Stop, "Servicio detenido.")
+		return m, serviceActionCmd(service.Stop, "Service stopped.")
 	case "r":
 		m.serviceLoading = true
 		m.message = ""
-		return m, serviceActionCmd(service.Restart, "Servicio reiniciado.")
-	case "a":
+		return m, serviceActionCmd(service.Restart, "Service restarted.")
+	case "u":
 		m.serviceLoading = true
 		return m, queryServiceCmd()
 	}
@@ -153,19 +153,19 @@ func (m Model) handleLogsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // renderServiceStatus renders the service screen
 func (m Model) renderServiceStatus(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" ESTADO DEL SERVICIO ") + "\n\n")
-	body.WriteString(headerStyle.Render("Servicio: ") + service.Name() + "\n")
+	body.WriteString(titleStyle.Render(" SERVICE STATUS ") + "\n\n")
+	body.WriteString(headerStyle.Render("Service: ") + service.Name() + "\n")
 
 	switch {
 	case !m.serviceKnown || m.serviceLoading:
-		body.WriteString(headerStyle.Render("Estado:   ") + processingStyle.Render("consultando...") + "\n")
+		body.WriteString(headerStyle.Render("Status:  ") + processingStyle.Render("checking...") + "\n")
 	case m.service.Err != nil:
-		body.WriteString(headerStyle.Render("Estado:   ") + inactiveStyle.Render("● DESCONOCIDO") + "\n\n")
+		body.WriteString(headerStyle.Render("Status:  ") + inactiveStyle.Render("● UNKNOWN") + "\n\n")
 		body.WriteString(errorStyle.Render(m.service.Err.Error()) + "\n")
 	case m.service.Active:
-		body.WriteString(headerStyle.Render("Estado:   ") + activeStyle.Render("● ACTIVO") + "\n")
+		body.WriteString(headerStyle.Render("Status:  ") + activeStyle.Render("● ACTIVE") + "\n")
 	default:
-		body.WriteString(headerStyle.Render("Estado:   ") + inactiveStyle.Render("● INACTIVO") + mutedStyle.Render(" ("+m.service.Status+")") + "\n")
+		body.WriteString(headerStyle.Render("Status:  ") + inactiveStyle.Render("● INACTIVE") + mutedStyle.Render(" ("+m.service.Status+")") + "\n")
 	}
 
 	if m.serviceKnown && m.service.Detail != "" {
@@ -187,22 +187,22 @@ func (m Model) renderServiceStatus(body *strings.Builder) {
 		m.renderMessage(body)
 	}
 
-	body.WriteString(footerStyle.Render("\ni: iniciar • d: detener • r: reiniciar • a: actualizar • esc: volver"))
+	body.WriteString(footerStyle.Render("\ns: start • x: stop • r: restart • u: update • esc: back"))
 }
 
 // renderLogs renders the daemon log screen
 func (m Model) renderLogs(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" LOGS DEL SERVICIO ") + "\n\n")
+	body.WriteString(titleStyle.Render(" SERVICE LOGS ") + "\n\n")
 
 	switch {
 	case m.logsErr != "":
-		body.WriteString(errorStyle.Render("No se pudo leer el log: "+m.logsErr) + "\n")
-		body.WriteString(mutedStyle.Render("El archivo se crea la primera vez que se ejecuta el servicio.") + "\n")
+		body.WriteString(errorStyle.Render("Could not read the log: "+m.logsErr) + "\n")
+		body.WriteString(mutedStyle.Render("The file is created the first time the service runs.") + "\n")
 	case len(m.logLines) == 0:
-		body.WriteString("Sin registros aún.\n")
+		body.WriteString("No entries yet.\n")
 	default:
 		body.WriteString(m.logsView.View() + "\n")
 	}
 
-	body.WriteString(footerStyle.Render("↑/↓: desplazar • pgup/pgdn: página • fin: ir al final • se actualiza cada 3 s • esc: volver"))
+	body.WriteString(footerStyle.Render("↑/↓: scroll • pgup/pgdn: page • end: go to the end • refreshes every 3 s • esc: back"))
 }

@@ -86,7 +86,7 @@ func Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Log(logging.Info, "Daemon detenido.")
+			logger.Log(logging.Info, "Daemon stopped.")
 			return nil
 
 		case event, ok := <-watcher.Events:
@@ -101,13 +101,13 @@ func Run(ctx context.Context) error {
 			reload = nil
 			next, err := loadSettings()
 			if err != nil {
-				logger.Logf(logging.Error, "No se pudo leer la configuración: %v", err)
+				logger.Logf(logging.Error, "Could not read the configuration: %v", err)
 				continue
 			}
 			if reflect.DeepEqual(next, current) {
 				continue
 			}
-			logger.Log(logging.Info, "Configuración modificada, aplicando cambios.")
+			logger.Log(logging.Info, "Configuration changed, applying the changes.")
 			stop()
 			current = next
 			stop = startEngines(ctx, current, logger)
@@ -116,7 +116,7 @@ func Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			logger.Logf(logging.Error, "Error del vigilante de configuración: %v", err)
+			logger.Logf(logging.Error, "Config watcher error: %v", err)
 		}
 	}
 }
@@ -127,7 +127,7 @@ func startEngines(ctx context.Context, s settings, logger *logging.Logger) (stop
 	ctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 
-	logger.Log(logging.Info, "Daemon iniciado. "+describe(s))
+	logger.Log(logging.Info, "Daemon started. "+describe(s))
 
 	// Versioned backup of configuration files
 	if s.ConfigBackup.RepoDir != "" && len(s.ConfigBackup.Watches) > 0 {
@@ -142,13 +142,13 @@ func startEngines(ctx context.Context, s settings, logger *logging.Logger) (stop
 
 		backuper, err := gitbackup.New(opts)
 		if err != nil {
-			logger.Logf(logging.Error, "Respaldo de configuraciones desactivado: %v", err)
+			logger.Logf(logging.Error, "Config backup disabled: %v", err)
 		} else {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				if err := backuper.Run(ctx); err != nil {
-					logger.Logf(logging.Error, "Respaldo de configuraciones detenido: %v", err)
+					logger.Logf(logging.Error, "Config backup stopped: %v", err)
 				}
 			}()
 		}
@@ -160,7 +160,7 @@ func startEngines(ctx context.Context, s settings, logger *logging.Logger) (stop
 		go func() {
 			defer wg.Done()
 			if err := backup.Run(ctx, logger.Log); err != nil {
-				logger.Logf(logging.Error, "Respaldo de archivos detenido: %v", err)
+				logger.Logf(logging.Error, "File backup stopped: %v", err)
 			}
 		}()
 	}
@@ -177,9 +177,9 @@ func describe(s settings) string {
 	for _, w := range s.ConfigBackup.Watches {
 		sources = append(sources, w.Source)
 	}
-	watching := "ninguna"
+	watching := "none"
 	if len(sources) > 0 {
 		watching = strings.Join(sources, ", ")
 	}
-	return fmt.Sprintf("Configuraciones vigiladas: %s. Rutas de respaldo de archivos: %d.", watching, len(s.BackupPaths))
+	return fmt.Sprintf("Watched configurations: %s. File backup paths: %d.", watching, len(s.BackupPaths))
 }

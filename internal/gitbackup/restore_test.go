@@ -15,14 +15,14 @@ func (e *env) watches() []Watch {
 
 func TestHistoryRecordsTheChangedFile(t *testing.T) {
 	e := newEnv(t)
-	e.write("extra/nat con espacios.conf", "nat")
+	e.write("extra/nat with spaces.conf", "nat")
 	e.b.SyncAll()
 
 	commits, err := History(e.repo, 10)
 	if err != nil || len(commits) != 1 {
 		t.Fatalf("unexpected history: %+v (%v)", commits, err)
 	}
-	if commits[0].Path != "firewall/extra/nat con espacios.conf" {
+	if commits[0].Path != "firewall/extra/nat with spaces.conf" {
 		t.Errorf("unexpected path: %q", commits[0].Path)
 	}
 }
@@ -33,7 +33,7 @@ func TestLivePath(t *testing.T) {
 	if got, ok := LivePath(watches, "firewall/extra/nat.conf"); !ok || got != "/etc/iptables/extra/nat.conf" {
 		t.Errorf("unexpected live path: %q %v", got, ok)
 	}
-	if _, ok := LivePath(watches, "dns/zona.conf"); ok {
+	if _, ok := LivePath(watches, "dns/zone.conf"); ok {
 		t.Errorf("expected no live path for a folder that is not watched")
 	}
 	if _, ok := LivePath(watches, "vpn2/server.conf"); ok {
@@ -43,11 +43,11 @@ func TestLivePath(t *testing.T) {
 
 func TestPreviewAndRestoreAnOlderVersion(t *testing.T) {
 	e := newEnv(t)
-	live := filepath.Join(e.source, "reglas.conf")
+	live := filepath.Join(e.source, "rules.conf")
 
-	e.write("reglas.conf", "regla 1\nregla 2\nregla 3\n")
+	e.write("rules.conf", "rule 1\nrule 2\nrule 3\n")
 	e.b.SyncAll()
-	e.write("reglas.conf", "regla 1\nregla CAMBIADA\nregla 3\nregla 4\n")
+	e.write("rules.conf", "rule 1\nrule CHANGED\nrule 3\nrule 4\n")
 	e.b.SyncAll()
 
 	commits, _ := History(e.repo, 10)
@@ -86,10 +86,10 @@ func TestPreviewAndRestoreAnOlderVersion(t *testing.T) {
 			hunkLine = line.Number
 		}
 	}
-	if strings.Join(removed, "|") != "regla CAMBIADA|regla 4" {
+	if strings.Join(removed, "|") != "rule CHANGED|rule 4" {
 		t.Errorf("expected the current lines to be removed, got %v", removed)
 	}
-	if strings.Join(added, "|") != "regla 2" {
+	if strings.Join(added, "|") != "rule 2" {
 		t.Errorf("expected the old line to come back, got %v", added)
 	}
 	if hunkLine != 1 {
@@ -102,7 +102,7 @@ func TestPreviewAndRestoreAnOlderVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(live)
-	if string(got) != "regla 1\nregla 2\nregla 3\n" {
+	if string(got) != "rule 1\nrule 2\nrule 3\n" {
 		t.Errorf("unexpected restored content: %q", got)
 	}
 	if info, _ := os.Stat(live); info.Mode().Perm() != 0o600 {
@@ -160,11 +160,11 @@ func TestPreviewWhenTheFileWasDeleted(t *testing.T) {
 
 func TestPreviewForAFolderNoLongerWatched(t *testing.T) {
 	e := newEnv(t)
-	e.write("reglas.conf", "regla\n")
+	e.write("rules.conf", "rule\n")
 	e.b.SyncAll()
 	commits, _ := History(e.repo, 10)
 
-	if _, err := PreviewRestore(e.repo, []Watch{{Source: "/etc/otro", Dest: "otro"}}, commits[0]); err == nil {
+	if _, err := PreviewRestore(e.repo, []Watch{{Source: "/etc/other", Dest: "other"}}, commits[0]); err == nil {
 		t.Errorf("expected an error when the folder is not watched anymore")
 	}
 }

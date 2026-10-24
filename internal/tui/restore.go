@@ -23,12 +23,12 @@ func (m Model) handleRestoreFinished(msg restoreFinishedMsg) (tea.Model, tea.Cmd
 	success := false
 	switch {
 	case msg.err != nil:
-		message = "La restauración falló: " + msg.err.Error()
+		message = "Restore failed: " + msg.err.Error()
 	case msg.result != nil && msg.result.Success:
 		message = msg.result.Message
 		success = true
 	case msg.result != nil:
-		message = "Restauración incompleta: " + msg.result.Message
+		message = "Restore incomplete: " + msg.result.Message
 	}
 
 	// Log restore event, failures included
@@ -58,7 +58,7 @@ func (m Model) handleRestoreFinished(msg restoreFinishedMsg) (tea.Model, tea.Cmd
 func (m *Model) loadBackups() {
 	nasPath, _ := config.GetNasPath()
 	if nasPath == "" {
-		m.message = "El destino de respaldo no está configurado"
+		m.message = "The backup destination is not configured"
 		m.isSuccess = false
 		m.allBackups = []restore.BackupInfo{}
 		return
@@ -83,14 +83,14 @@ func (m *Model) loadBackups() {
 
 	backups, err := restore.GetAllBackupsEnhanced(nasPath, configPaths, historyEvents)
 	if err != nil {
-		m.message = "No se pudieron cargar los respaldos: " + err.Error()
+		m.message = "Could not load the backups: " + err.Error()
 		m.isSuccess = false
 		m.allBackups = []restore.BackupInfo{}
 		return
 	}
 
 	m.allBackups = backups
-	m.message = fmt.Sprintf("%d respaldos encontrados", len(backups))
+	m.message = fmt.Sprintf("%d backups found", len(backups))
 	m.isSuccess = true
 }
 
@@ -223,7 +223,7 @@ func (m Model) handleRestoreInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if path != "" {
 			// Validate path
 			if err := restore.ValidateRestorePath(path); err != nil {
-				m.message = "Ruta inválida: " + err.Error()
+				m.message = "Invalid path: " + err.Error()
 				m.isSuccess = false
 				return m, nil
 			}
@@ -239,11 +239,11 @@ func (m Model) handleRestoreInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // renderViewBackups renders the list of available backups
 func (m Model) renderViewBackups(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" VER RESPALDOS ") + "\n\n")
+	body.WriteString(titleStyle.Render(" VIEW BACKUPS ") + "\n\n")
 	if len(m.allBackups) == 0 {
-		body.WriteString("No se encontraron respaldos.\n\n")
+		body.WriteString("No backups found.\n\n")
 	} else {
-		body.WriteString(headerStyle.Render("Respaldos disponibles:") + "\n")
+		body.WriteString(headerStyle.Render("Available backups:") + "\n")
 		// Show up to 6 backups at a time
 		visibleBackups := 6
 		for i := m.backupsOffset; i < len(m.allBackups) && i < m.backupsOffset+visibleBackups; i++ {
@@ -273,52 +273,52 @@ func (m Model) renderViewBackups(body *strings.Builder) {
 		// Add scroll indicator
 		if len(m.allBackups) > visibleBackups {
 			scrollPercentage := int((float64(m.backupsOffset+visibleBackups) / float64(len(m.allBackups))) * 100)
-			scrollIndicator := fmt.Sprintf("\n[Respaldos: %d/%d - %d%%]", m.backupsOffset+1, len(m.allBackups), scrollPercentage)
+			scrollIndicator := fmt.Sprintf("\n[Backups: %d/%d - %d%%]", m.backupsOffset+1, len(m.allBackups), scrollPercentage)
 			body.WriteString(statusStyle.Render(scrollIndicator) + "\n")
 		}
 	}
 
 	m.renderMessage(body)
 
-	body.WriteString(footerStyle.Render("\nenter: restaurar • ↑/↓: desplazar • pgup/pgdn: desplazar más • esc: volver"))
+	body.WriteString(footerStyle.Render("\nenter: restore • ↑/↓: scroll • pgup/pgdn: scroll faster • esc: back"))
 }
 
 // renderSelectRestoreDest renders the restore destination selection screen
 func (m Model) renderSelectRestoreDest(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" DESTINO DE LA RESTAURACIÓN ") + "\n\n")
-	body.WriteString(headerStyle.Render("Respaldo: ") + itemStyle.Render(m.selectedBackup.Filename) + "\n")
-	body.WriteString(headerStyle.Render("Origen:   ") + itemStyle.Render(m.selectedBackup.SourcePath) + "\n\n")
+	body.WriteString(titleStyle.Render(" RESTORE DESTINATION ") + "\n\n")
+	body.WriteString(headerStyle.Render("Backup: ") + itemStyle.Render(m.selectedBackup.Filename) + "\n")
+	body.WriteString(headerStyle.Render("Source: ") + itemStyle.Render(m.selectedBackup.SourcePath) + "\n\n")
 
-	body.WriteString(headerStyle.Render("¿Dónde desea restaurar?") + "\n\n")
-	body.WriteString("o - Ubicación original: " + m.selectedBackup.SourcePath + "\n")
-	body.WriteString("c - Elegir otra ruta\n\n")
+	body.WriteString(headerStyle.Render("Where do you want to restore it?") + "\n\n")
+	body.WriteString("o - Original location: " + m.selectedBackup.SourcePath + "\n")
+	body.WriteString("c - Choose another path\n\n")
 
 	m.renderMessage(body)
 
-	body.WriteString(footerStyle.Render("o: original • c: otra ruta • esc: volver"))
+	body.WriteString(footerStyle.Render("o: original • c: another path • esc: back"))
 }
 
 // renderRestoreInput renders the custom restore path input screen
 func (m Model) renderRestoreInput(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" RUTA DE RESTAURACIÓN ") + "\n\n")
+	body.WriteString(titleStyle.Render(" RESTORE PATH ") + "\n\n")
 	fmt.Fprintf(body,
-		"Ruta donde restaurar el respaldo:\n\n%s\n\n",
+		"Path to restore the backup to:\n\n%s\n\n",
 		m.restoreInput.View(),
 	)
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("(esc: cancelar • enter: confirmar)"))
+	body.WriteString(footerStyle.Render("(esc: cancel • enter: confirm)"))
 }
 
 // renderSelectRestoreAction renders the conflict resolution screen
 func (m Model) renderSelectRestoreAction(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" ARCHIVOS EXISTENTES ") + "\n\n")
-	body.WriteString(headerStyle.Render("Restaurar en: ") + itemStyle.Render(m.restorePath) + "\n\n")
-	body.WriteString(headerStyle.Render("Si ya hay archivos en el destino, ¿qué hacemos?") + "\n\n")
+	body.WriteString(titleStyle.Render(" EXISTING FILES ") + "\n\n")
+	body.WriteString(headerStyle.Render("Restore to: ") + itemStyle.Render(m.restorePath) + "\n\n")
+	body.WriteString(headerStyle.Render("If there are already files at the destination, what should we do?") + "\n\n")
 
 	actions := []string{
-		"✓ Sobrescribir - Reemplaza los archivos del respaldo; conserva los demás",
-		"↻ Renombrar    - Guarda lo existente con fecha y restaura el respaldo",
-		"✗ Omitir       - No restaura si ya hay archivos",
+		"✓ Overwrite - Replaces the files in the backup; keeps the rest",
+		"↻ Rename    - Keeps what exists under a dated name and restores the backup",
+		"✗ Skip      - Does not restore if there are files already",
 	}
 
 	for i, action := range actions {
@@ -331,10 +331,10 @@ func (m Model) renderSelectRestoreAction(body *strings.Builder) {
 
 	body.WriteString("\n")
 	if m.isRestoring {
-		body.WriteString(processingStyle.Render("Restaurando... Por favor espere.") + "\n")
+		body.WriteString(processingStyle.Render("Restoring... Please wait.") + "\n")
 	} else {
 		m.renderMessage(body)
 	}
 
-	body.WriteString(footerStyle.Render("\n↑/↓: seleccionar • enter: confirmar • esc: volver"))
+	body.WriteString(footerStyle.Render("\n↑/↓: select • enter: confirm • esc: back"))
 }

@@ -76,7 +76,7 @@ func TestPreviewToEmptyDestination(t *testing.T) {
 	backup := filepath.Join(tmp, "docs_20260101_000000.tar.gz")
 	writeBackup(t, backup, dirBackup())
 
-	p, err := NewPreview(backup, filepath.Join(tmp, "nuevo"))
+	p, err := NewPreview(backup, filepath.Join(tmp, "new"))
 	if err != nil {
 		t.Fatal(err)
 	}

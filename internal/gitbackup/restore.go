@@ -69,12 +69,12 @@ func FileAt(repoDir, hash, path string) ([]byte, bool, error) {
 // PreviewRestore compares the watched file with its version in a commit
 func PreviewRestore(repoDir string, watches []Watch, commit Commit) (*Preview, error) {
 	if commit.Path == "" {
-		return nil, fmt.Errorf("el commit no registra ningún archivo")
+		return nil, fmt.Errorf("the commit records no file")
 	}
 
 	livePath, watch, ok := liveFile(watches, commit.Path)
 	if !ok {
-		return nil, fmt.Errorf("la carpeta de %s ya no está entre las carpetas vigiladas", commit.Path)
+		return nil, fmt.Errorf("the folder of %s is no longer among the watched folders", commit.Path)
 	}
 
 	content, inCommit, err := FileAt(repoDir, commit.Hash, commit.Path)
@@ -96,7 +96,7 @@ func PreviewRestore(repoDir string, watches []Watch, commit Commit) (*Preview, e
 		preview.LiveExists = true
 		preview.Identical = bytes.Equal(current, content)
 	case !os.IsNotExist(err):
-		return nil, fmt.Errorf("no se pudo leer %s: %w", livePath, err)
+		return nil, fmt.Errorf("could not read %s: %w", livePath, err)
 	}
 	if preview.Identical {
 		return preview, nil
@@ -138,7 +138,7 @@ func diffContent(currentPath string, wanted []byte) ([]textdiff.Line, error) {
 // watched directory exactly as it was.
 func (p *Preview) Restore() (string, error) {
 	if !p.InCommit {
-		return "", fmt.Errorf("el commit no contiene una versión del archivo")
+		return "", fmt.Errorf("the commit holds no version of the file")
 	}
 
 	var output []string
@@ -150,8 +150,8 @@ func (p *Preview) Restore() (string, error) {
 		defer os.RemoveAll(stage)
 
 		for _, hook := range []struct{ command, failure string }{
-			{p.Watch.Check, "la versión a restaurar no pasa la validación"},
-			{p.Watch.Apply, "no se pudo aplicar la versión a restaurar"},
+			{p.Watch.Check, "the version to restore does not pass validation"},
+			{p.Watch.Apply, "could not apply the version to restore"},
 		} {
 			if hook.command == "" {
 				continue
@@ -189,7 +189,7 @@ func (p *Preview) stage() (string, error) {
 	// falls back to its own copy of them
 	if err := mirror(p.Watch.Source, stage, func(string) {}); err != nil {
 		os.RemoveAll(stage)
-		return "", fmt.Errorf("no se pudo preparar la validación: %w", err)
+		return "", fmt.Errorf("could not prepare the validation: %w", err)
 	}
 
 	rel, err := filepath.Rel(p.Watch.Source, p.LivePath)
@@ -269,7 +269,7 @@ func installFile(path string, content []byte) error {
 	args = append(args, tmp.Name(), path)
 
 	if out, err := sudo(args...); err != nil {
-		return fmt.Errorf("no hay permiso para escribir %s y sudo no lo permitió: %s", path, lastLines(out, 2))
+		return fmt.Errorf("no permission to write %s, and sudo did not allow it: %s", path, lastLines(out, 2))
 	}
 	return nil
 }

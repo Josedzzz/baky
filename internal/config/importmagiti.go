@@ -13,7 +13,7 @@ import (
 type magitiConfig struct {
 	WatchDir string            `json:"watch_dir"`
 	RepoDir  string            `json:"repo_dir"`
-	Carpetas map[string]string `json:"carpetas"`
+	Folders  map[string]string `json:"carpetas"` // the old daemon used a Spanish key
 }
 
 // ImportMagitiConfig adds the folders watched by a magiti-config-backup
@@ -30,15 +30,15 @@ func ImportMagitiConfig(path string) ([]WatchConfig, error) {
 
 	var old magitiConfig
 	if err := json.Unmarshal(data, &old); err != nil {
-		return nil, fmt.Errorf("%s no contiene JSON válido: %w", path, err)
+		return nil, fmt.Errorf("%s does not contain valid JSON: %w", path, err)
 	}
 	if !filepath.IsAbs(old.WatchDir) {
-		return nil, fmt.Errorf("'watch_dir' debe ser una ruta absoluta: %q", old.WatchDir)
+		return nil, fmt.Errorf("'watch_dir' must be an absolute path: %q", old.WatchDir)
 	}
 
 	// Sorted, so the result does not depend on the order of the JSON map
-	folders := make([]string, 0, len(old.Carpetas))
-	for folder := range old.Carpetas {
+	folders := make([]string, 0, len(old.Folders))
+	for folder := range old.Folders {
 		folders = append(folders, folder)
 	}
 	sort.Strings(folders)
@@ -47,7 +47,7 @@ func ImportMagitiConfig(path string) ([]WatchConfig, error) {
 	for _, folder := range folders {
 		watch := WatchConfig{
 			Source: filepath.Join(old.WatchDir, folder),
-			Dest:   old.Carpetas[folder],
+			Dest:   old.Folders[folder],
 		}
 		if err := AddWatch(watch.Source, watch.Dest); err != nil {
 			return added, fmt.Errorf("%s: %w", folder, err)

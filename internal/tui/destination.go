@@ -19,7 +19,7 @@ func (m Model) handleConfigureBackupDestUpdate(msg tea.KeyMsg) (tea.Model, tea.C
 		m.message = ""
 	case "t":
 		if m.backupDest == "" {
-			m.message = "El destino de respaldo no está configurado"
+			m.message = "The backup destination is not configured"
 			m.isSuccess = false
 			return m, nil
 		}
@@ -28,10 +28,10 @@ func (m Model) handleConfigureBackupDestUpdate(msg tea.KeyMsg) (tea.Model, tea.C
 			m.message = "Error: " + err.Error()
 			m.isSuccess = false
 		} else if !info.IsDir() {
-			m.message = "La ruta no es un directorio"
+			m.message = "The path is not a directory"
 			m.isSuccess = false
 		} else {
-			m.message = "El destino de respaldo es accesible."
+			m.message = "The backup destination is accessible."
 			m.isSuccess = true
 		}
 	case "esc":
@@ -51,11 +51,11 @@ func (m Model) handleBackupDestInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		val := strings.TrimSpace(m.backupDestInput.Value())
 		if val != "" {
 			if err := config.SaveNasPath(val); err != nil {
-				m.message = "No se pudo guardar el destino: " + err.Error()
+				m.message = "Could not save the destination: " + err.Error()
 				m.isSuccess = false
 			} else {
 				m.backupDest = val
-				m.message = "Destino de respaldo actualizado"
+				m.message = "Backup destination updated"
 				m.isSuccess = true
 			}
 			m.state = configureBackupDestView
@@ -68,26 +68,26 @@ func (m Model) handleBackupDestInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 
 // renderBackupDest renders the backup destination screen
 func (m Model) renderBackupDest(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" DESTINO DE RESPALDO ") + "\n\n")
+	body.WriteString(titleStyle.Render(" BACKUP DESTINATION ") + "\n\n")
 	displayPath := m.backupDest
 	if displayPath == "" {
-		displayPath = "sin configurar"
+		displayPath = "not configured"
 	}
-	fmt.Fprintf(body, "Destino de respaldo: %s\n\n", displayPath)
+	fmt.Fprintf(body, "Backup destination: %s\n\n", displayPath)
 
 	if m.message != "" {
 		m.renderMessage(body)
 		body.WriteString("\n")
 	}
-	body.WriteString(footerStyle.Render("e: editar • t: probar acceso • esc: volver"))
+	body.WriteString(footerStyle.Render("e: edit • t: test access • esc: back"))
 }
 
 // renderBackupDestInput renders the backup destination input screen
 func (m Model) renderBackupDestInput(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" EDITAR DESTINO DE RESPALDO ") + "\n\n")
+	body.WriteString(titleStyle.Render(" EDIT BACKUP DESTINATION ") + "\n\n")
 	fmt.Fprintf(body,
-		"Ruta donde se guardan los respaldos:\n\n%s\n\n%s",
+		"Path where backups are stored:\n\n%s\n\n%s",
 		m.backupDestInput.View(),
-		footerStyle.Render("(esc: cancelar • enter: guardar)"),
+		footerStyle.Render("(esc: cancel • enter: save)"),
 	)
 }

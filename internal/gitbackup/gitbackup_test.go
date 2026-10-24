@@ -136,21 +136,21 @@ func (e *env) assertNoRepoFile(rel string) {
 
 func TestSyncCommitsAndPushesNewAndModifiedFiles(t *testing.T) {
 	e := newEnv(t)
-	e.write("reglas.conf", "regla 1")
+	e.write("rules.conf", "rule 1")
 
 	if commits := e.b.SyncAll(); commits != 1 {
 		t.Fatalf("expected 1 commit, got %d", commits)
 	}
-	e.assertRepoFile("firewall/reglas.conf", "regla 1")
+	e.assertRepoFile("firewall/rules.conf", "rule 1")
 
-	want := "auto-backup: actualizado reglas.conf (2026-07-24 21:46:14)"
+	want := "auto-backup: updated rules.conf (2026-07-24 21:46:14)"
 	if got := e.subjects(e.repo); len(got) != 1 || got[0] != want {
 		t.Errorf("expected commit %q, got %v", want, got)
 	}
 	if got := e.subjects(e.remote); len(got) != 1 {
 		t.Errorf("expected the commit to be pushed, remote has %v", got)
 	}
-	if !e.logged("Commit realizado: actualizado reglas.conf -> firewall/reglas.conf.") || !e.logged("Push exitoso.") {
+	if !e.logged("Commit created: updated rules.conf -> firewall/rules.conf.") || !e.logged("Push succeeded.") {
 		t.Errorf("unexpected log: %v", e.logs)
 	}
 
@@ -159,11 +159,11 @@ func TestSyncCommitsAndPushesNewAndModifiedFiles(t *testing.T) {
 		t.Errorf("expected no commit without changes, got %d", commits)
 	}
 
-	e.write("reglas.conf", "regla 2")
+	e.write("rules.conf", "rule 2")
 	if commits := e.b.SyncAll(); commits != 1 {
 		t.Errorf("expected 1 commit for the modification, got %d", commits)
 	}
-	e.assertRepoFile("firewall/reglas.conf", "regla 2")
+	e.assertRepoFile("firewall/rules.conf", "rule 2")
 	if got := e.subjects(e.remote); len(got) != 2 {
 		t.Errorf("expected 2 commits in the remote, got %v", got)
 	}
@@ -171,7 +171,7 @@ func TestSyncCommitsAndPushesNewAndModifiedFiles(t *testing.T) {
 
 func TestSyncDeleteAndRename(t *testing.T) {
 	e := newEnv(t)
-	e.write("temporal.conf", "contenido")
+	e.write("temp.conf", "content")
 	e.write("vpn.conf", "vpn")
 	e.b.SyncAll()
 
@@ -181,69 +181,69 @@ func TestSyncDeleteAndRename(t *testing.T) {
 		t.Fatalf("expected 1 commit for the deletion, got %d", commits)
 	}
 	e.assertNoRepoFile("firewall/vpn.conf")
-	if got := e.subjects(e.repo)[0]; !strings.HasPrefix(got, "auto-backup: eliminado vpn.conf (") {
+	if got := e.subjects(e.repo)[0]; !strings.HasPrefix(got, "auto-backup: deleted vpn.conf (") {
 		t.Errorf("unexpected commit: %q", got)
 	}
 
 	// Rename: recorded as the removal of the old name and the new file
-	os.Rename(filepath.Join(e.source, "temporal.conf"), filepath.Join(e.source, "renombrado.conf"))
+	os.Rename(filepath.Join(e.source, "temp.conf"), filepath.Join(e.source, "renamed.conf"))
 	if commits := e.b.SyncAll(); commits != 2 {
 		t.Fatalf("expected 2 commits for the rename, got %d", commits)
 	}
-	e.assertNoRepoFile("firewall/temporal.conf")
-	e.assertRepoFile("firewall/renombrado.conf", "contenido")
+	e.assertNoRepoFile("firewall/temp.conf")
+	e.assertRepoFile("firewall/renamed.conf", "content")
 
 	all := strings.Join(e.subjects(e.repo), "\n")
-	if !strings.Contains(all, "eliminado temporal.conf") || !strings.Contains(all, "actualizado renombrado.conf") {
+	if !strings.Contains(all, "deleted temp.conf") || !strings.Contains(all, "updated renamed.conf") {
 		t.Errorf("unexpected commits:\n%s", all)
 	}
 }
 
 func TestSyncNestedFoldersAndFolderMove(t *testing.T) {
 	e := newEnv(t)
-	e.write("reglas_extra/nat.conf", "nat rule")
-	e.write("reglas_extra/deep/more.conf", "more")
-	e.write("reglas.conf", "regla")
+	e.write("rules_extra/nat.conf", "nat rule")
+	e.write("rules_extra/deep/more.conf", "more")
+	e.write("rules.conf", "rule")
 
 	if commits := e.b.SyncAll(); commits != 3 {
 		t.Fatalf("expected 3 commits, got %d", commits)
 	}
-	e.assertRepoFile("firewall/reglas_extra/nat.conf", "nat rule")
-	e.assertRepoFile("firewall/reglas_extra/deep/more.conf", "more")
+	e.assertRepoFile("firewall/rules_extra/nat.conf", "nat rule")
+	e.assertRepoFile("firewall/rules_extra/deep/more.conf", "more")
 
 	// Moving a whole folder out of the watched directory removes it from the repo
-	os.Rename(filepath.Join(e.source, "reglas_extra"), filepath.Join(filepath.Dir(e.source), "moved"))
+	os.Rename(filepath.Join(e.source, "rules_extra"), filepath.Join(filepath.Dir(e.source), "moved"))
 	if commits := e.b.SyncAll(); commits != 2 {
 		t.Fatalf("expected 2 commits for the moved folder, got %d", commits)
 	}
-	e.assertNoRepoFile("firewall/reglas_extra")
-	e.assertRepoFile("firewall/reglas.conf", "regla")
+	e.assertNoRepoFile("firewall/rules_extra")
+	e.assertRepoFile("firewall/rules.conf", "rule")
 
 	// Moving it back in backs it up again
-	os.Rename(filepath.Join(filepath.Dir(e.source), "moved"), filepath.Join(e.source, "reglas_extra"))
+	os.Rename(filepath.Join(filepath.Dir(e.source), "moved"), filepath.Join(e.source, "rules_extra"))
 	if commits := e.b.SyncAll(); commits != 2 {
 		t.Fatalf("expected 2 commits for the folder moved in, got %d", commits)
 	}
-	e.assertRepoFile("firewall/reglas_extra/deep/more.conf", "more")
+	e.assertRepoFile("firewall/rules_extra/deep/more.conf", "more")
 }
 
 func TestSyncIgnoresEditorTempFiles(t *testing.T) {
 	e := newEnv(t)
-	e.write("reglas.conf", "regla")
-	for _, name := range []string{".reglas.conf.swp", "reglas.conf~", "4913", ".#reglas.conf"} {
+	e.write("rules.conf", "rule")
+	for _, name := range []string{".rules.conf.swp", "rules.conf~", "4913", ".#rules.conf"} {
 		e.write(name, "noise")
 	}
 
 	if commits := e.b.SyncAll(); commits != 1 {
 		t.Fatalf("expected only the real file to be committed, got %d commits: %v", commits, e.subjects(e.repo))
 	}
-	e.assertNoRepoFile("firewall/.reglas.conf.swp")
-	e.assertNoRepoFile("firewall/reglas.conf~")
+	e.assertNoRepoFile("firewall/.rules.conf.swp")
+	e.assertNoRepoFile("firewall/rules.conf~")
 }
 
 func TestSyncMissingSourceKeepsTheBackup(t *testing.T) {
 	e := newEnv(t)
-	e.write("reglas.conf", "regla")
+	e.write("rules.conf", "rule")
 	e.b.SyncAll()
 
 	// The watched directory disappears (unmounted disk, wrong path...)
@@ -252,8 +252,8 @@ func TestSyncMissingSourceKeepsTheBackup(t *testing.T) {
 	if commits := e.b.SyncAll(); commits != 0 {
 		t.Errorf("expected no commit, got %d", commits)
 	}
-	e.assertRepoFile("firewall/reglas.conf", "regla")
-	if !e.logged("Carpeta vigilada no accesible") {
+	e.assertRepoFile("firewall/rules.conf", "rule")
+	if !e.logged("Watched folder not accessible") {
 		t.Errorf("expected an error in the log, got %v", e.logs)
 	}
 }
@@ -262,11 +262,11 @@ func TestPushFailureIsRetried(t *testing.T) {
 	e := newEnv(t)
 	run(t, e.repo, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "missing.git"))
 
-	e.write("reglas.conf", "regla")
+	e.write("rules.conf", "rule")
 	if commits := e.b.SyncAll(); commits != 1 {
 		t.Fatalf("expected the commit to be kept locally, got %d", commits)
 	}
-	if !e.logged("Fallo al hacer push") {
+	if !e.logged("Push failed") {
 		t.Errorf("expected the push failure in the log, got %v", e.logs)
 	}
 
@@ -289,7 +289,7 @@ func TestCommitWithoutGitIdentity(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 
-	e.write("reglas.conf", "regla")
+	e.write("rules.conf", "rule")
 	if commits := e.b.SyncAll(); commits != 1 {
 		t.Fatalf("expected the commit to succeed with a default identity, got %d: %v", commits, e.logs)
 	}
@@ -309,18 +309,35 @@ func TestHistoryListsOnlyBackups(t *testing.T) {
 	run(t, e.repo, "add", "README.md")
 	run(t, e.repo, "commit", "--quiet", "-m", "docs: manual commit")
 
-	e.write("reglas.conf", "regla")
+	e.write("rules.conf", "rule")
 	e.b.SyncAll()
 
 	commits, err := History(e.repo, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commits) != 1 || commits[0].Message != "auto-backup: actualizado reglas.conf (2026-07-24 21:46:14)" {
+	if len(commits) != 1 || commits[0].Message != "auto-backup: updated rules.conf (2026-07-24 21:46:14)" {
 		t.Errorf("unexpected history: %+v", commits)
 	}
 	if commits[0].Hash == "" || commits[0].Date == "" {
 		t.Errorf("expected hash and date, got %+v", commits[0])
+	}
+}
+
+func TestHistoryRecognizesLegacyInvalidMarker(t *testing.T) {
+	e := newEnv(t)
+
+	// A commit made before the messages were translated to English
+	os.WriteFile(filepath.Join(e.repo, "old.conf"), []byte("old"), 0o644)
+	run(t, e.repo, "add", "old.conf")
+	run(t, e.repo, "commit", "--quiet", "-m", "auto-backup: actualizado old.conf (2026-07-24 21:46:14) [validación fallida]")
+
+	commits, err := History(e.repo, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 1 || !commits[0].Invalid {
+		t.Errorf("expected the legacy commit to be marked invalid: %+v", commits)
 	}
 }
 
@@ -345,7 +362,7 @@ func TestNewValidatesOptions(t *testing.T) {
 func TestRunBacksUpChangesAsTheyHappen(t *testing.T) {
 	e := newEnv(t)
 	// A change made while the daemon was not running
-	e.write("antes.conf", "offline")
+	e.write("before.conf", "offline")
 
 	b := e.backuper(Options{Debounce: 50 * time.Millisecond})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -367,17 +384,17 @@ func TestRunBacksUpChangesAsTheyHappen(t *testing.T) {
 		return func() bool { return strings.Contains(strings.Join(e.subjects(e.remote), "\n"), text) }
 	}
 
-	waitFor("the startup sync", committed("actualizado antes.conf"))
+	waitFor("the startup sync", committed("updated before.conf"))
 
-	e.write("reglas.conf", "regla")
-	waitFor("a new file", committed("actualizado reglas.conf"))
+	e.write("rules.conf", "rule")
+	waitFor("a new file", committed("updated rules.conf"))
 
 	// A directory created after startup is watched too
-	e.write("nuevo/nat.conf", "nat")
-	waitFor("a file in a new directory", committed("actualizado nat.conf"))
+	e.write("new/nat.conf", "nat")
+	waitFor("a file in a new directory", committed("updated nat.conf"))
 
-	os.Remove(filepath.Join(e.source, "reglas.conf"))
-	waitFor("a deletion", committed("eliminado reglas.conf"))
+	os.Remove(filepath.Join(e.source, "rules.conf"))
+	waitFor("a deletion", committed("deleted rules.conf"))
 
 	cancel()
 	select {

@@ -72,10 +72,10 @@ type Backuper struct {
 // New validates the options and returns a Backuper ready to run
 func New(opts Options) (*Backuper, error) {
 	if opts.RepoDir == "" {
-		return nil, fmt.Errorf("no hay un repositorio de configuraciones definido")
+		return nil, fmt.Errorf("no config repository is set")
 	}
 	if !IsRepo(opts.RepoDir) {
-		return nil, fmt.Errorf("%s no es un repositorio Git válido", opts.RepoDir)
+		return nil, fmt.Errorf("%s is not a valid Git repository", opts.RepoDir)
 	}
 	if opts.Branch == "" {
 		opts.Branch = "main"
@@ -92,11 +92,11 @@ func New(opts Options) (*Backuper, error) {
 
 	for _, w := range opts.Watches {
 		if !filepath.IsAbs(w.Source) {
-			return nil, fmt.Errorf("la ruta a vigilar debe ser absoluta: %s", w.Source)
+			return nil, fmt.Errorf("the path to watch must be absolute: %s", w.Source)
 		}
 		// The destination must stay one folder inside the repository
 		if w.Dest == "" || w.Dest != filepath.Base(w.Dest) || w.Dest == "." || w.Dest == ".." || w.Dest == ".git" {
-			return nil, fmt.Errorf("destino inválido para %s: %q", w.Source, w.Dest)
+			return nil, fmt.Errorf("invalid destination for %s: %q", w.Source, w.Dest)
 		}
 		for _, hook := range []string{w.Check, w.Apply} {
 			if err := ValidateHook(hook); err != nil {
@@ -149,13 +149,13 @@ func (b *Backuper) syncWatch(w Watch) int {
 	if err := mirror(w.Source, dest, warn); err != nil {
 		// The backup already in the repository is left untouched: a folder
 		// that is missing or unreadable must not erase its own history.
-		b.logf(logging.Error, "Carpeta vigilada no accesible, se omite: %s (%v)", w.Source, err)
+		b.logf(logging.Error, "Watched folder not accessible, skipping: %s (%v)", w.Source, err)
 		return 0
 	}
 
 	changes, err := pendingChanges(b.opts.RepoDir, w.Dest)
 	if err != nil {
-		b.logf(logging.Error, "No se pudo consultar el estado de %s: %v", w.Dest, err)
+		b.logf(logging.Error, "Could not get the status of %s: %v", w.Dest, err)
 		return 0
 	}
 
@@ -167,28 +167,28 @@ func (b *Backuper) syncWatch(w Watch) int {
 		output, err := runHook(w.Check, w.Source)
 		switch {
 		case err == nil:
-			b.logf(logging.Info, "Validación correcta: %s", w.Source)
+			b.logf(logging.Info, "Validation passed: %s", w.Source)
 		case errors.Is(err, errHookNotRun):
-			b.logf(logging.Error, "No se pudo validar %s: %v", w.Source, err)
+			b.logf(logging.Error, "Could not validate %s: %v", w.Source, err)
 		default:
 			suffix, checkOutput = " "+invalidMarker, lastLines(output, 20)
-			b.logf(logging.Warn, "La configuración de %s NO pasa la validación: %s", w.Source, strings.ReplaceAll(lastLines(output, 3), "\n", " | "))
+			b.logf(logging.Warn, "The configuration of %s does NOT pass validation: %s", w.Source, strings.ReplaceAll(lastLines(output, 3), "\n", " | "))
 		}
 	}
 
 	commits := 0
 	for _, c := range changes {
-		description := "actualizado " + filepath.Base(c.path)
+		description := "updated " + filepath.Base(c.path)
 		if c.deleted {
-			description = "eliminado " + filepath.Base(c.path)
+			description = "deleted " + filepath.Base(c.path)
 		}
 		message := fmt.Sprintf("%s: %s (%s)%s", commitPrefix, description, b.now().Format("2006-01-02 15:04:05"), suffix)
 
 		if err := commitPath(b.opts.RepoDir, c.path, message, checkOutput); err != nil {
-			b.logf(logging.Error, "Fallo al hacer commit de %s: %v", c.path, err)
+			b.logf(logging.Error, "Commit of %s failed: %v", c.path, err)
 			continue
 		}
-		b.logf(logging.Info, "Commit realizado: %s -> %s.", description, c.path)
+		b.logf(logging.Info, "Commit created: %s -> %s.", description, c.path)
 		commits++
 	}
 
@@ -207,17 +207,17 @@ func (b *Backuper) Push() bool {
 	}
 	if !hasRemote(b.opts.RepoDir) {
 		if !b.warnedNoRemote {
-			b.logf(logging.Warn, "El repositorio no tiene remoto 'origin'; los commits quedan solo en local.")
+			b.logf(logging.Warn, "The repository has no 'origin' remote; the commits stay local only.")
 			b.warnedNoRemote = true
 		}
 		return false
 	}
 
 	if err := push(b.opts.RepoDir, b.opts.Branch); err != nil {
-		b.logf(logging.Error, "Fallo al hacer push. Commits locales guardados, pendiente de reintento: %v", err)
+		b.logf(logging.Error, "Push failed. Local commits are saved and will be retried: %v", err)
 		return false
 	}
-	b.logf(logging.Info, "Push exitoso.")
+	b.logf(logging.Info, "Push succeeded.")
 	return true
 }
 
@@ -298,7 +298,7 @@ func (b *Backuper) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			b.logf(logging.Error, "Error del vigilante de archivos: %v", err)
+			b.logf(logging.Error, "File watcher error: %v", err)
 		}
 	}
 }

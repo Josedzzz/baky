@@ -172,42 +172,42 @@ func (m Model) handleRestoreFileDiffUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 func changeLabel(kind restore.ChangeKind) (mark, description string) {
 	switch kind {
 	case restore.ChangeModified:
-		return logWarnStyle.Render("M"), "se modifica"
+		return logWarnStyle.Render("M"), "modified"
 	case restore.ChangeNew:
-		return diffAddedStyle.Render("+"), "se crea"
+		return diffAddedStyle.Render("+"), "created"
 	default:
-		return mutedStyle.Render("="), "queda igual"
+		return mutedStyle.Render("="), "unchanged"
 	}
 }
 
 // renderRestorePreview renders what restoring the backup would change
 func (m Model) renderRestorePreview(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" CAMBIOS DE LA RESTAURACIÓN ") + "\n\n")
-	body.WriteString(headerStyle.Render("Respaldo: ") + m.selectedBackup.Filename + "\n")
-	body.WriteString(headerStyle.Render("Destino:  ") + m.restorePath + "\n\n")
+	body.WriteString(titleStyle.Render(" RESTORE CHANGES ") + "\n\n")
+	body.WriteString(headerStyle.Render("Backup:      ") + m.selectedBackup.Filename + "\n")
+	body.WriteString(headerStyle.Render("Destination: ") + m.restorePath + "\n\n")
 
 	switch {
 	case m.restorePreviewLoading:
-		body.WriteString(processingStyle.Render("Comparando el respaldo con el destino...") + "\n")
-		body.WriteString(footerStyle.Render("esc: volver"))
+		body.WriteString(processingStyle.Render("Comparing the backup with the destination...") + "\n")
+		body.WriteString(footerStyle.Render("esc: back"))
 		return
 	case m.restorePreviewErr != "":
-		body.WriteString(errorStyle.Render("No se pudo revisar el respaldo: "+m.restorePreviewErr) + "\n")
-		body.WriteString(footerStyle.Render("esc: volver"))
+		body.WriteString(errorStyle.Render("Could not inspect the backup: "+m.restorePreviewErr) + "\n")
+		body.WriteString(footerStyle.Render("esc: back"))
 		return
 	case m.restorePreview == nil:
 		return
 	}
 
 	p := m.restorePreview
-	body.WriteString(logWarnStyle.Render(fmt.Sprintf("M se modifican: %d", p.Modified)) + "   " +
-		diffAddedStyle.Render(fmt.Sprintf("+ se crean: %d", p.New)) + "   " +
-		mutedStyle.Render(fmt.Sprintf("= quedan igual: %d", p.Same)) + "\n")
+	body.WriteString(logWarnStyle.Render(fmt.Sprintf("M modified: %d", p.Modified)) + "   " +
+		diffAddedStyle.Render(fmt.Sprintf("+ created: %d", p.New)) + "   " +
+		mutedStyle.Render(fmt.Sprintf("= unchanged: %d", p.Same)) + "\n")
 	if p.OnlyInDest > 0 {
-		body.WriteString(mutedStyle.Render(fmt.Sprintf("Archivos del destino que no están en el respaldo: %d (\"Sobrescribir\" los conserva).", p.OnlyInDest)) + "\n")
+		body.WriteString(mutedStyle.Render(fmt.Sprintf("Files at the destination that are not in the backup: %d (\"Overwrite\" keeps them).", p.OnlyInDest)) + "\n")
 	}
 	if !p.HasChanges() {
-		body.WriteString(successStyle.Render("El destino ya es igual al respaldo: no hay nada que restaurar.") + "\n")
+		body.WriteString(successStyle.Render("The destination already matches the backup: there is nothing to restore.") + "\n")
 	}
 	body.WriteString("\n")
 
@@ -223,44 +223,44 @@ func (m Model) renderRestorePreview(body *strings.Builder) {
 		}
 	}
 	if len(p.Files) > visible {
-		body.WriteString(statusStyle.Render(fmt.Sprintf("[Archivo %d de %d]", m.previewCursor+1, len(p.Files))) + "\n")
+		body.WriteString(statusStyle.Render(fmt.Sprintf("[File %d of %d]", m.previewCursor+1, len(p.Files))) + "\n")
 	}
 
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("\n↑/↓: seleccionar • enter: ver diferencias • r: continuar con la restauración • esc: volver"))
+	body.WriteString(footerStyle.Render("\n↑/↓: select • enter: view differences • r: continue with the restore • esc: back"))
 }
 
 // renderRestoreFileDiff renders the comparison between the current file
 // and the one in the backup
 func (m Model) renderRestoreFileDiff(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" DIFERENCIAS DEL ARCHIVO ") + "\n\n")
+	body.WriteString(titleStyle.Render(" FILE DIFFERENCES ") + "\n\n")
 
 	if m.restorePreview == nil || m.previewCursor >= len(m.restorePreview.Files) {
 		return
 	}
 	change := m.restorePreview.Files[m.previewCursor]
 	_, description := changeLabel(change.Kind)
-	body.WriteString(headerStyle.Render("Archivo:  ") + change.DestPath + "\n")
-	body.WriteString(headerStyle.Render("Respaldo: ") + m.selectedBackup.Filename + mutedStyle.Render("  ("+description+")") + "\n\n")
+	body.WriteString(headerStyle.Render("File:   ") + change.DestPath + "\n")
+	body.WriteString(headerStyle.Render("Backup: ") + m.selectedBackup.Filename + mutedStyle.Render("  ("+description+")") + "\n\n")
 
-	footer := "esc: volver"
+	footer := "esc: back"
 	switch {
 	case m.fileDiffLoading:
-		body.WriteString(processingStyle.Render("Comparando...") + "\n")
+		body.WriteString(processingStyle.Render("Comparing...") + "\n")
 	case m.fileDiffErr != "":
 		body.WriteString(errorStyle.Render(m.fileDiffErr) + "\n")
 	case change.Kind == restore.ChangeSame || m.fileDiffEmpty:
-		body.WriteString(successStyle.Render("El archivo actual ya es igual al del respaldo.") + "\n")
+		body.WriteString(successStyle.Render("The current file already matches the one in the backup.") + "\n")
 	default:
 		if change.Kind == restore.ChangeNew {
-			body.WriteString(mutedStyle.Render("El archivo no existe en el destino: restaurar lo crearía.") + "\n")
+			body.WriteString(mutedStyle.Render("The file does not exist at the destination: restoring would create it.") + "\n")
 		}
-		body.WriteString("Si restaura el respaldo:  " +
-			diffRemovedStyle.Render("- línea actual que se quita") + "   " +
-			diffAddedStyle.Render("+ línea que vuelve") + "\n\n")
+		body.WriteString("If you restore the backup:  " +
+			diffRemovedStyle.Render("- current line that is removed") + "   " +
+			diffAddedStyle.Render("+ line that comes back") + "\n\n")
 		body.WriteString(m.diffView.View() + "\n")
 		body.WriteString(statusStyle.Render(fmt.Sprintf("[%d%%]", int(m.diffView.ScrollPercent()*100))) + "\n")
-		footer = "↑/↓: desplazar • pgup/pgdn: página • esc: volver"
+		footer = "↑/↓: scroll • pgup/pgdn: page • esc: back"
 	}
 
 	body.WriteString(footerStyle.Render(footer))

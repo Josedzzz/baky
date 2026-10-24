@@ -90,7 +90,7 @@ func NewPreview(backupPath, destPath string) (*Preview, error) {
 	})
 	if err != nil {
 		p.Close()
-		return nil, fmt.Errorf("no se pudo revisar el respaldo: %w", err)
+		return nil, fmt.Errorf("could not inspect the backup: %w", err)
 	}
 
 	// Files of the destination the backup knows nothing about

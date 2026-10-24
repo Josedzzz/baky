@@ -22,8 +22,8 @@ func writeHook(t *testing.T, name, body string) (command, callsFile string) {
 	return "sh " + script + " {dir}", callsFile
 }
 
-// rejectBroken is a check that fails when reglas.conf contains "ROTA"
-const rejectBroken = `if grep -q ROTA "$1/reglas.conf" 2>/dev/null; then echo "ERROR: regla invalida en reglas.conf"; exit 1; fi; echo "Configuration verified"`
+// rejectBroken is a check that fails when rules.conf contains "BROKEN"
+const rejectBroken = `if grep -q BROKEN "$1/rules.conf" 2>/dev/null; then echo "ERROR: invalid rule in rules.conf"; exit 1; fi; echo "Configuration verified"`
 
 func (e *env) withHooks(check, apply string) {
 	e.b.opts.Watches[0].Check = check
@@ -58,15 +58,15 @@ func TestCheckRunsAfterChangesAndMarksInvalidCommits(t *testing.T) {
 	e.withHooks(check, "")
 
 	// A valid change: normal commit, the check ran once on the watched directory
-	e.write("reglas.conf", "regla 1\n")
-	e.write("otra.conf", "x\n")
+	e.write("rules.conf", "rule 1\n")
+	e.write("other.conf", "x\n")
 	if commits := e.b.SyncAll(); commits != 2 {
 		t.Fatalf("expected 2 commits, got %d: %v", commits, e.logs)
 	}
 	if got := calls(t, checkCalls); len(got) != 1 || got[0] != e.source {
 		t.Errorf("expected one check on %s, got %v", e.source, got)
 	}
-	if !e.logged("Validación correcta") {
+	if !e.logged("Validation passed") {
 		t.Errorf("expected the successful validation in the log: %v", e.logs)
 	}
 	for _, c := range mustHistory(t, e) {
@@ -82,25 +82,25 @@ func TestCheckRunsAfterChangesAndMarksInvalidCommits(t *testing.T) {
 	}
 
 	// A broken change is still backed up, but marked
-	e.write("reglas.conf", "regla ROTA\n")
+	e.write("rules.conf", "rule BROKEN\n")
 	if commits := e.b.SyncAll(); commits != 1 {
 		t.Fatalf("expected the broken change to be committed, got %d", commits)
 	}
-	e.assertRepoFile("firewall/reglas.conf", "regla ROTA\n")
+	e.assertRepoFile("firewall/rules.conf", "rule BROKEN\n")
 
 	newest := mustHistory(t, e)[0]
-	if !newest.Invalid || !strings.HasSuffix(newest.Message, "[validación fallida]") {
+	if !newest.Invalid || !strings.HasSuffix(newest.Message, "[validation failed]") {
 		t.Errorf("expected the commit to be marked invalid: %+v", newest)
 	}
-	if body := commitBody(e.repo, newest.Hash); !strings.Contains(body, "regla invalida en reglas.conf") {
+	if body := commitBody(e.repo, newest.Hash); !strings.Contains(body, "invalid rule in rules.conf") {
 		t.Errorf("expected the check output in the commit body, got %q", body)
 	}
-	if !e.logged("NO pasa la validación") {
+	if !e.logged("does NOT pass validation") {
 		t.Errorf("expected the failed validation in the log: %v", e.logs)
 	}
 
 	// Fixing it produces a normal commit again
-	e.write("reglas.conf", "regla 2\n")
+	e.write("rules.conf", "rule 2\n")
 	e.b.SyncAll()
 	if newest := mustHistory(t, e)[0]; newest.Invalid {
 		t.Errorf("expected the fix to be a valid commit: %+v", newest)
@@ -109,16 +109,16 @@ func TestCheckRunsAfterChangesAndMarksInvalidCommits(t *testing.T) {
 
 func TestCheckThatCannotRunDoesNotMarkCommits(t *testing.T) {
 	e := newEnv(t)
-	e.withHooks("/no/existe/validador {dir}", "")
+	e.withHooks("/does/not/exist/validator {dir}", "")
 
-	e.write("reglas.conf", "regla 1\n")
+	e.write("rules.conf", "rule 1\n")
 	if commits := e.b.SyncAll(); commits != 1 {
 		t.Fatalf("expected the commit, got %d", commits)
 	}
 	if mustHistory(t, e)[0].Invalid {
 		t.Errorf("a check that could not run says nothing about the configuration")
 	}
-	if !e.logged("No se pudo validar") {
+	if !e.logged("Could not validate") {
 		t.Errorf("expected the problem in the log: %v", e.logs)
 	}
 }
@@ -134,29 +134,29 @@ func mustHistory(t *testing.T, e *env) []Commit {
 
 func TestRestoreValidatesAndAppliesBeforeWriting(t *testing.T) {
 	e := newEnv(t)
-	live := filepath.Join(e.source, "reglas.conf")
+	live := filepath.Join(e.source, "rules.conf")
 
 	// History: a good version, a broken one, and the current good one
-	e.write("otra.conf", "x\n")
-	e.write("reglas.conf", "regla 1\n")
+	e.write("other.conf", "x\n")
+	e.write("rules.conf", "rule 1\n")
 	e.b.SyncAll()
-	e.write("reglas.conf", "regla ROTA\n")
+	e.write("rules.conf", "rule BROKEN\n")
 	e.b.SyncAll()
-	e.write("reglas.conf", "regla 3\n")
+	e.write("rules.conf", "rule 3\n")
 	e.b.SyncAll()
 
 	// The apply command records the content it was asked to put into service
 	check, checkCalls := writeHook(t, "check", rejectBroken)
-	apply, applyCalls := writeHook(t, "apply", `cat "$1/reglas.conf" "$1/otra.conf" > `+filepath.Join(t.TempDir(), "applied")+`; echo "Shorewall restarted"`)
+	apply, applyCalls := writeHook(t, "apply", `cat "$1/rules.conf" "$1/other.conf" > `+filepath.Join(t.TempDir(), "applied")+`; echo "Shorewall restarted"`)
 	watches := []Watch{{Source: e.source, Dest: "firewall", Check: check, Apply: apply}}
 
 	var good, broken Commit
 	for _, c := range mustHistory(t, e) {
-		content, _, _ := FileAt(e.repo, c.Hash, "firewall/reglas.conf")
+		content, _, _ := FileAt(e.repo, c.Hash, "firewall/rules.conf")
 		switch string(content) {
-		case "regla 1\n":
+		case "rule 1\n":
 			good = c
-		case "regla ROTA\n":
+		case "rule BROKEN\n":
 			broken = c
 		}
 	}
@@ -167,13 +167,13 @@ func TestRestoreValidatesAndAppliesBeforeWriting(t *testing.T) {
 		t.Fatal(err)
 	}
 	output, err := preview.Restore()
-	if err == nil || !strings.Contains(err.Error(), "no pasa la validación") {
+	if err == nil || !strings.Contains(err.Error(), "does not pass validation") {
 		t.Fatalf("expected the restore to be rejected, got %v", err)
 	}
-	if !strings.Contains(output, "regla invalida") {
+	if !strings.Contains(output, "invalid rule") {
 		t.Errorf("expected the check output, got %q", output)
 	}
-	if got, _ := os.ReadFile(live); string(got) != "regla 3\n" {
+	if got, _ := os.ReadFile(live); string(got) != "rule 3\n" {
 		t.Errorf("a rejected restore must not touch the file, got %q", got)
 	}
 	if len(calls(t, applyCalls)) != 0 {
@@ -201,7 +201,7 @@ func TestRestoreValidatesAndAppliesBeforeWriting(t *testing.T) {
 	if !strings.Contains(output, "Configuration verified") || !strings.Contains(output, "Shorewall restarted") {
 		t.Errorf("expected the output of both commands, got %q", output)
 	}
-	if got, _ := os.ReadFile(live); string(got) != "regla 1\n" {
+	if got, _ := os.ReadFile(live); string(got) != "rule 1\n" {
 		t.Errorf("expected the good version to be restored, got %q", got)
 	}
 	if len(calls(t, applyCalls)) != 1 {
@@ -211,23 +211,23 @@ func TestRestoreValidatesAndAppliesBeforeWriting(t *testing.T) {
 
 func TestRestoreIsAbortedWhenApplyFails(t *testing.T) {
 	e := newEnv(t)
-	live := filepath.Join(e.source, "reglas.conf")
-	e.write("reglas.conf", "regla 1\n")
+	live := filepath.Join(e.source, "rules.conf")
+	e.write("rules.conf", "rule 1\n")
 	e.b.SyncAll()
-	e.write("reglas.conf", "regla 2\n")
+	e.write("rules.conf", "rule 2\n")
 	e.b.SyncAll()
 
-	apply, _ := writeHook(t, "apply", `echo "ERROR: no se pudo aplicar"; exit 1`)
+	apply, _ := writeHook(t, "apply", `echo "ERROR: could not apply"; exit 1`)
 	watches := []Watch{{Source: e.source, Dest: "firewall", Apply: apply}}
 
 	preview, err := PreviewRestore(e.repo, watches, mustHistory(t, e)[1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := preview.Restore(); err == nil || !strings.Contains(err.Error(), "no se pudo aplicar") {
+	if _, err := preview.Restore(); err == nil || !strings.Contains(err.Error(), "could not apply") {
 		t.Fatalf("expected the restore to fail, got %v", err)
 	}
-	if got, _ := os.ReadFile(live); string(got) != "regla 2\n" {
+	if got, _ := os.ReadFile(live); string(got) != "rule 2\n" {
 		t.Errorf("a failed apply must not touch the file, got %q", got)
 	}
 }

@@ -17,7 +17,7 @@ import (
 // if it were valid, with silently wrong contents, instead of failing.
 func verifyGzipTail(r *gzip.Reader) error {
 	if _, err := io.Copy(io.Discard, r); err != nil {
-		return fmt.Errorf("respaldo corrupto: %w", err)
+		return fmt.Errorf("corrupt backup: %w", err)
 	}
 	return nil
 }

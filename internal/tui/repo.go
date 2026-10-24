@@ -30,13 +30,13 @@ func (m Model) handleConfigRepoUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) testRepo() {
 	switch {
 	case m.configBackup.RepoDir == "":
-		m.message = "El repositorio no está configurado"
+		m.message = "The repository is not configured"
 		m.isSuccess = false
 	case !gitbackup.IsRepo(m.configBackup.RepoDir):
-		m.message = "La ruta no es un repositorio Git. Clónelo primero con 'git clone'."
+		m.message = "The path is not a Git repository. Clone it first with 'git clone'."
 		m.isSuccess = false
 	default:
-		m.message = "El repositorio es válido."
+		m.message = "The repository is valid."
 		m.isSuccess = true
 	}
 }
@@ -63,7 +63,7 @@ func (m Model) handleConfigRepoInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		m.state = configRepoView
 		m.testRepo()
 		if m.isSuccess {
-			m.message = "Repositorio actualizado."
+			m.message = "Repository updated."
 		}
 		return m, nil
 	}
@@ -73,30 +73,30 @@ func (m Model) handleConfigRepoInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 
 // renderConfigRepo renders the config repository screen
 func (m Model) renderConfigRepo(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" REPOSITORIO DE CONFIGURACIONES ") + "\n\n")
+	body.WriteString(titleStyle.Render(" CONFIG REPOSITORY ") + "\n\n")
 
 	repoDir := m.configBackup.RepoDir
 	if repoDir == "" {
-		repoDir = "sin configurar"
+		repoDir = "not configured"
 	}
-	fmt.Fprintf(body, "Repositorio local: %s\n", repoDir)
-	fmt.Fprintf(body, "Rama remota:       %s\n\n", m.configBackup.Branch)
-	body.WriteString(mutedStyle.Render("Es el clon local del repositorio Git donde se guardan las\nconfiguraciones. Cada cambio se registra con un commit y se envía\nal remoto 'origin'.") + "\n\n")
+	fmt.Fprintf(body, "Local repository: %s\n", repoDir)
+	fmt.Fprintf(body, "Remote branch:    %s\n\n", m.configBackup.Branch)
+	body.WriteString(mutedStyle.Render("The local clone of the Git repository where configurations are\nstored. Every change is recorded as a commit and pushed to the\n'origin' remote.") + "\n\n")
 
 	if m.message != "" {
 		m.renderMessage(body)
 		body.WriteString("\n")
 	}
-	body.WriteString(footerStyle.Render("e: editar • t: probar • esc: volver"))
+	body.WriteString(footerStyle.Render("e: edit • t: test • esc: back"))
 }
 
 // renderConfigRepoInput renders the config repository path input
 func (m Model) renderConfigRepoInput(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" EDITAR REPOSITORIO ") + "\n\n")
+	body.WriteString(titleStyle.Render(" EDIT REPOSITORY ") + "\n\n")
 	fmt.Fprintf(body,
-		"Ruta del clon local del repositorio de configuraciones:\n\n%s\n\n",
+		"Path of the local clone of the config repository:\n\n%s\n\n",
 		m.repoInput.View(),
 	)
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("(esc: cancelar • enter: guardar)"))
+	body.WriteString(footerStyle.Render("(esc: cancel • enter: save)"))
 }

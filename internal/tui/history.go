@@ -33,7 +33,7 @@ type configRestoredMsg struct {
 func loadCommitsCmd(repoDir string) tea.Cmd {
 	return func() tea.Msg {
 		if repoDir == "" {
-			return commitsLoadedMsg{err: fmt.Errorf("el repositorio no está configurado")}
+			return commitsLoadedMsg{err: fmt.Errorf("the repository is not configured")}
 		}
 		commits, err := gitbackup.History(repoDir, maxCommits)
 		return commitsLoadedMsg{commits: commits, err: err}
@@ -189,7 +189,7 @@ func (m Model) handleConfigRestoreConfirmUpdate(msg tea.KeyMsg) (tea.Model, tea.
 	}
 
 	switch msg.String() {
-	case "y", "s":
+	case "y":
 		m.configRestoring = true
 		return m, restoreConfigCmd(m.preview)
 	case "n", "esc":
@@ -203,7 +203,7 @@ func (m Model) handleConfigRestored(msg configRestoredMsg) (tea.Model, tea.Cmd) 
 	m.configRestoring = false
 	if msg.err != nil {
 		m.state = configDiffView
-		m.message = "No se restauró nada: " + msg.err.Error()
+		m.message = "Nothing was restored: " + msg.err.Error()
 		if msg.output != "" {
 			m.message += "\n" + lastOutputLines(msg.output, 6)
 		}
@@ -214,7 +214,7 @@ func (m Model) handleConfigRestored(msg configRestoredMsg) (tea.Model, tea.Cmd) 
 	m.state = configHistoryView
 	m.commitsCursor = 0
 	m.commitsOffset = 0
-	m.message = fmt.Sprintf("%s restaurado. El servicio lo registrará como un cambio nuevo; use r para refrescar.", msg.path)
+	m.message = fmt.Sprintf("%s restored. The service will record it as a new change; press r to refresh.", msg.path)
 	m.isSuccess = true
 	return m, loadCommitsCmd(m.configBackup.RepoDir)
 }
@@ -232,7 +232,7 @@ func renderDiffLines(lines []textdiff.Line) string {
 			if i > 0 {
 				rendered = append(rendered, "")
 			}
-			rendered = append(rendered, diffHunkStyle.Render(fmt.Sprintf("── Cambios desde la línea %d del archivo actual ──", line.Number)))
+			rendered = append(rendered, diffHunkStyle.Render(fmt.Sprintf("── Changes from line %d of the current file ──", line.Number)))
 		case textdiff.Removed:
 			rendered = append(rendered, diffRemovedStyle.Render("- "+text))
 		case textdiff.Added:
@@ -248,15 +248,15 @@ func renderDiffLines(lines []textdiff.Line) string {
 
 // renderConfigHistory renders the list of config backups already made
 func (m Model) renderConfigHistory(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" HISTORIAL DE CAMBIOS ") + "\n\n")
+	body.WriteString(titleStyle.Render(" CHANGE HISTORY ") + "\n\n")
 
 	switch {
 	case m.commitsErr != "":
-		body.WriteString(errorStyle.Render("No se pudo leer el historial: "+m.commitsErr) + "\n")
+		body.WriteString(errorStyle.Render("Could not read the history: "+m.commitsErr) + "\n")
 	case len(m.commits) == 0:
-		body.WriteString("Aún no hay respaldos de configuraciones registrados.\n")
+		body.WriteString("No config backups have been recorded yet.\n")
 	default:
-		body.WriteString(headerStyle.Render("Seleccione un cambio para compararlo con el archivo actual:") + "\n")
+		body.WriteString(headerStyle.Render("Select a change to compare it with the current file:") + "\n")
 		visible := m.visibleCommits()
 		for i := m.commitsOffset; i < len(m.commits) && i < m.commitsOffset+visible; i++ {
 			c := m.commits[i]
@@ -271,33 +271,33 @@ func (m Model) renderConfigHistory(body *strings.Builder) {
 				body.WriteString(itemStyle.Render(line) + "\n")
 			}
 		}
-		body.WriteString(statusStyle.Render(fmt.Sprintf("[Cambio %d de %d]", m.commitsCursor+1, len(m.commits))) + "\n")
+		body.WriteString(statusStyle.Render(fmt.Sprintf("[Change %d of %d]", m.commitsCursor+1, len(m.commits))) + "\n")
 	}
 
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("↑/↓: seleccionar • enter: ver cambios / restaurar • r: refrescar • esc: volver"))
+	body.WriteString(footerStyle.Render("↑/↓: select • enter: view changes / restore • r: refresh • esc: back"))
 }
 
 // renderConfigDiff renders the comparison between the current file and
 // its version in the selected commit
 func (m Model) renderConfigDiff(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" CAMBIOS A RESTAURAR ") + "\n\n")
+	body.WriteString(titleStyle.Render(" CHANGES TO RESTORE ") + "\n\n")
 
 	c := m.selectedCommit
-	body.WriteString(headerStyle.Render("Cambio:  ") + c.Hash + "  " + c.Date + "\n")
-	body.WriteString(headerStyle.Render("Detalle: ") + c.Message + "\n")
+	body.WriteString(headerStyle.Render("Change:  ") + c.Hash + "  " + c.Date + "\n")
+	body.WriteString(headerStyle.Render("Details: ") + c.Message + "\n")
 
 	if c.Invalid {
-		body.WriteString(errorStyle.Render("Este cambio no pasó la validación cuando se respaldó.") + "\n")
+		body.WriteString(errorStyle.Render("This change did not pass validation when it was backed up.") + "\n")
 		if m.preview != nil && m.preview.CheckOutput != "" {
 			body.WriteString(mutedStyle.Render(lastOutputLines(m.preview.CheckOutput, 4)) + "\n")
 		}
 	}
 
-	footer := "esc: volver"
+	footer := "esc: back"
 	switch {
 	case m.previewLoading:
-		body.WriteString("\n" + processingStyle.Render("Comparando...") + "\n")
+		body.WriteString("\n" + processingStyle.Render("Comparing...") + "\n")
 
 	case m.previewErr != "":
 		body.WriteString("\n" + errorStyle.Render(m.previewErr) + "\n")
@@ -306,25 +306,25 @@ func (m Model) renderConfigDiff(body *strings.Builder) {
 		// Nothing to show yet
 
 	case !m.preview.InCommit:
-		body.WriteString(headerStyle.Render("Archivo: ") + m.preview.LivePath + "\n\n")
-		body.WriteString("Este cambio eliminó el archivo, así que no contiene una versión para restaurar.\n")
-		body.WriteString(mutedStyle.Render("Para recuperar el archivo, elija en el historial un cambio anterior.") + "\n")
+		body.WriteString(headerStyle.Render("File:    ") + m.preview.LivePath + "\n\n")
+		body.WriteString("This change deleted the file, so it holds no version to restore.\n")
+		body.WriteString(mutedStyle.Render("To recover the file, choose an earlier change in the history.") + "\n")
 
 	case m.preview.Identical:
-		body.WriteString(headerStyle.Render("Archivo: ") + m.preview.LivePath + "\n\n")
-		body.WriteString(successStyle.Render("El archivo actual ya es igual a esta versión: no hay nada que restaurar.") + "\n")
+		body.WriteString(headerStyle.Render("File:    ") + m.preview.LivePath + "\n\n")
+		body.WriteString(successStyle.Render("The current file already matches this version: there is nothing to restore.") + "\n")
 
 	default:
-		body.WriteString(headerStyle.Render("Archivo: ") + m.preview.LivePath + "\n\n")
+		body.WriteString(headerStyle.Render("File:    ") + m.preview.LivePath + "\n\n")
 		if !m.preview.LiveExists {
-			body.WriteString(mutedStyle.Render("El archivo no existe actualmente: restaurar lo volvería a crear.") + "\n")
+			body.WriteString(mutedStyle.Render("The file does not exist right now: restoring would create it again.") + "\n")
 		}
-		body.WriteString("Si restaura esta versión:  " +
-			diffRemovedStyle.Render("- línea actual que se quita") + "   " +
-			diffAddedStyle.Render("+ línea que vuelve") + "\n\n")
+		body.WriteString("If you restore this version:  " +
+			diffRemovedStyle.Render("- current line that is removed") + "   " +
+			diffAddedStyle.Render("+ line that comes back") + "\n\n")
 		body.WriteString(m.diffView.View() + "\n")
 		body.WriteString(statusStyle.Render(fmt.Sprintf("[%d%%]", int(m.diffView.ScrollPercent()*100))) + "\n")
-		footer = "↑/↓: desplazar • pgup/pgdn: página • r: restaurar esta versión • esc: volver"
+		footer = "↑/↓: scroll • pgup/pgdn: page • r: restore this version • esc: back"
 	}
 
 	m.renderMessage(body)
@@ -333,7 +333,7 @@ func (m Model) renderConfigDiff(body *strings.Builder) {
 
 // renderConfigRestoreConfirm renders the confirmation before a restore
 func (m Model) renderConfigRestoreConfirm(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" CONFIRMAR RESTAURACIÓN ") + "\n\n")
+	body.WriteString(titleStyle.Render(" CONFIRM RESTORE ") + "\n\n")
 
 	removed, added := 0, 0
 	for _, line := range m.preview.Lines {
@@ -345,39 +345,39 @@ func (m Model) renderConfigRestoreConfirm(body *strings.Builder) {
 		}
 	}
 
-	fmt.Fprintf(body, "¿Restaurar este archivo a la versión del %s?\n\n", m.selectedCommit.Date)
-	body.WriteString(headerStyle.Render("Archivo: ") + m.preview.LivePath + "\n")
-	body.WriteString(headerStyle.Render("Cambios: ") +
-		diffRemovedStyle.Render(countLines(removed, "se quita", "se quitan")) + ", " +
-		diffAddedStyle.Render(countLines(added, "vuelve", "vuelven")) + "\n\n")
+	fmt.Fprintf(body, "Restore this file to the version from %s?\n\n", m.selectedCommit.Date)
+	body.WriteString(headerStyle.Render("File:    ") + m.preview.LivePath + "\n")
+	body.WriteString(headerStyle.Render("Changes: ") +
+		diffRemovedStyle.Render(countLines(removed, "removed", "removed")) + ", " +
+		diffAddedStyle.Render(countLines(added, "comes back", "come back")) + "\n\n")
 	// What will run before the file is written
 	watch := m.preview.Watch
 	if watch.Check != "" || watch.Apply != "" {
-		body.WriteString(headerStyle.Render("Antes de escribir el archivo, sobre una copia temporal:") + "\n")
+		body.WriteString(headerStyle.Render("Before the file is written, on a temporary copy:") + "\n")
 		if watch.Check != "" {
-			body.WriteString("  1. Validar:  " + watch.Check + "\n")
+			body.WriteString("  1. Validate:  " + watch.Check + "\n")
 		}
 		if watch.Apply != "" {
-			body.WriteString("  2. Aplicar:  " + watch.Apply + "\n")
+			body.WriteString("  2. Apply:     " + watch.Apply + "\n")
 		}
-		body.WriteString(mutedStyle.Render("Si alguno falla, no se restaura nada.") + "\n\n")
+		body.WriteString(mutedStyle.Render("If either one fails, nothing is restored.") + "\n\n")
 	}
 
-	body.WriteString(mutedStyle.Render("Con el servicio activo, el contenido actual ya está respaldado en el\nhistorial y la restauración queda registrada como un cambio nuevo.") + "\n")
+	body.WriteString(mutedStyle.Render("With the service running, the current content is already backed up in\nthe history, and the restore is recorded as a new change.") + "\n")
 
 	if m.configRestoring {
-		body.WriteString("\n" + processingStyle.Render("Validando y restaurando... Por favor espere.") + "\n")
+		body.WriteString("\n" + processingStyle.Render("Validating and restoring... Please wait.") + "\n")
 		return
 	}
-	body.WriteString(footerStyle.Render("\ns/y: restaurar • n/esc: cancelar"))
+	body.WriteString(footerStyle.Render("\ny: restore • n/esc: cancel"))
 }
 
 // countLines phrases a number of lines in singular or plural
 func countLines(n int, singular, plural string) string {
 	if n == 1 {
-		return "1 línea " + singular
+		return "1 line " + singular
 	}
-	return fmt.Sprintf("%d líneas %s", n, plural)
+	return fmt.Sprintf("%d lines %s", n, plural)
 }
 
 // lastOutputLines keeps the end of a command output, where the error usually is

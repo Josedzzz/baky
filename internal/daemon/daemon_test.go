@@ -65,7 +65,7 @@ func TestDaemonEndToEnd(t *testing.T) {
 	git(t, repo, "config", "user.email", "test@example.com")
 
 	// A change made before the daemon starts
-	os.WriteFile(filepath.Join(firewall, "reglas.conf"), []byte("regla"), 0o644)
+	os.WriteFile(filepath.Join(firewall, "rules.conf"), []byte("rule"), 0o644)
 
 	if err := config.SaveConfigRepo(repo); err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestDaemonEndToEnd(t *testing.T) {
 			return err == nil && strings.Contains(string(out), text)
 		}
 	}
-	waitFor(t, "the startup sync", committed("actualizado reglas.conf"))
+	waitFor(t, "the startup sync", committed("updated rules.conf"))
 
 	// A watch added while running is picked up without a restart
 	if err := config.AddWatch(vpn, "vpn"); err != nil {
@@ -92,10 +92,10 @@ func TestDaemonEndToEnd(t *testing.T) {
 	}
 	waitFor(t, "the config reload", func() bool {
 		log, _ := os.ReadFile(config.LogPath())
-		return strings.Contains(string(log), "Configuración modificada")
+		return strings.Contains(string(log), "Configuration changed")
 	})
 	os.WriteFile(filepath.Join(vpn, "server.conf"), []byte("vpn"), 0o644)
-	waitFor(t, "a file in the new watch", committed("actualizado server.conf"))
+	waitFor(t, "a file in the new watch", committed("updated server.conf"))
 	if _, err := os.Stat(filepath.Join(repo, "vpn", "server.conf")); err != nil {
 		t.Errorf("expected vpn/server.conf in the repository: %v", err)
 	}
@@ -109,11 +109,11 @@ func TestDaemonEndToEnd(t *testing.T) {
 	}
 	waitFor(t, "the file backup engine", func() bool {
 		log, _ := os.ReadFile(config.LogPath())
-		return strings.Contains(string(log), "Rutas de respaldo de archivos: 1")
+		return strings.Contains(string(log), "File backup paths: 1")
 	})
 	// Give the new engine a moment to place its watches
 	time.Sleep(300 * time.Millisecond)
-	os.WriteFile(filepath.Join(docs, "informe.txt"), []byte("informe"), 0o644)
+	os.WriteFile(filepath.Join(docs, "report.txt"), []byte("report"), 0o644)
 	waitFor(t, "the on_change backup", func() bool {
 		archives, _ := filepath.Glob(filepath.Join(nas, "docs_*.tar.gz"))
 		return len(archives) > 0

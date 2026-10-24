@@ -65,13 +65,13 @@ func (m Model) handleWatchSourceInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 			return m, nil
 		}
 		if !filepath.IsAbs(source) {
-			m.message = "La ruta debe ser absoluta (empezar con /)"
+			m.message = "The path must be absolute (start with /)"
 			m.isSuccess = false
 			return m, nil
 		}
 		info, err := os.Stat(source)
 		if err != nil || !info.IsDir() {
-			m.message = "La ruta no existe o no es una carpeta"
+			m.message = "The path does not exist or is not a folder"
 			m.isSuccess = false
 			return m, nil
 		}
@@ -108,7 +108,7 @@ func (m Model) handleWatchDestInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.reloadConfigBackup()
 		m.state = watchesView
-		m.message = fmt.Sprintf("Carpeta '%s' agregada. El servicio aplica el cambio automáticamente.", m.pendingSource)
+		m.message = fmt.Sprintf("Folder '%s' added. The service applies the change automatically.", m.pendingSource)
 		m.isSuccess = true
 		return m, nil
 	}
@@ -119,13 +119,13 @@ func (m Model) handleWatchDestInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleWatchConfirmDeleteUpdate asks before a folder stops being watched
 func (m Model) handleWatchConfirmDeleteUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "y", "s":
+	case "y":
 		source := m.configBackup.Watches[m.watchesCursor].Source
 		if err := config.RemoveWatch(source); err != nil {
 			m.message = err.Error()
 			m.isSuccess = false
 		} else {
-			m.message = fmt.Sprintf("La carpeta '%s' ya no se vigila.", source)
+			m.message = fmt.Sprintf("Folder '%s' is no longer watched.", source)
 			m.isSuccess = true
 		}
 		m.reloadConfigBackup()
@@ -138,16 +138,16 @@ func (m Model) handleWatchConfirmDeleteUpdate(msg tea.KeyMsg) (tea.Model, tea.Cm
 
 // renderWatches renders the watched folders list
 func (m Model) renderWatches(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" CARPETAS VIGILADAS ") + "\n\n")
+	body.WriteString(titleStyle.Render(" WATCHED FOLDERS ") + "\n\n")
 
 	if m.configBackup.RepoDir == "" {
-		body.WriteString(errorStyle.Render("Aún no hay un repositorio configurado (menú Repositorio).") + "\n\n")
+		body.WriteString(errorStyle.Render("No repository is configured yet (Repository menu).") + "\n\n")
 	}
 
 	if len(m.configBackup.Watches) == 0 {
-		body.WriteString("No hay carpetas vigiladas.\n\n")
+		body.WriteString("No folders are being watched.\n\n")
 	} else {
-		body.WriteString(headerStyle.Render("Carpeta vigilada  →  carpeta en el repositorio") + "\n")
+		body.WriteString(headerStyle.Render("Watched folder  →  folder in the repository") + "\n")
 		for i, w := range m.configBackup.Watches {
 			style := itemStyle
 			if m.watchesCursor == i {
@@ -158,45 +158,45 @@ func (m Model) renderWatches(body *strings.Builder) {
 
 		// Hook commands of the selected folder
 		selected := m.configBackup.Watches[m.watchesCursor]
-		body.WriteString("\n" + headerStyle.Render("Validación: ") + commandOrNone(selected.Check) + "\n")
-		body.WriteString(headerStyle.Render("Aplicación: ") + commandOrNone(selected.Apply) + "\n\n")
+		body.WriteString("\n" + headerStyle.Render("Validation: ") + commandOrNone(selected.Check) + "\n")
+		body.WriteString(headerStyle.Render("Apply:      ") + commandOrNone(selected.Apply) + "\n\n")
 	}
 
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("a: agregar • c: comandos de validación • d: dejar de vigilar • esc: volver"))
+	body.WriteString(footerStyle.Render("a: add • c: validation commands • d: stop watching • esc: back"))
 }
 
 // renderWatchInput renders both steps of adding a watched folder
 func (m Model) renderWatchInput(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" AGREGAR CARPETA VIGILADA ") + "\n\n")
+	body.WriteString(titleStyle.Render(" ADD WATCHED FOLDER ") + "\n\n")
 
 	if m.state == watchSourceInputView {
-		body.WriteString("Paso 1 de 2 - Ruta de la carpeta a vigilar:\n\n")
+		body.WriteString("Step 1 of 2 - Path of the folder to watch:\n\n")
 	} else {
-		body.WriteString(headerStyle.Render("Carpeta: ") + itemStyle.Render(m.pendingSource) + "\n\n")
-		body.WriteString("Paso 2 de 2 - Nombre de la carpeta dentro del repositorio:\n\n")
+		body.WriteString(headerStyle.Render("Folder: ") + itemStyle.Render(m.pendingSource) + "\n\n")
+		body.WriteString("Step 2 of 2 - Name of the folder inside the repository:\n\n")
 	}
 	body.WriteString(m.watchInput.View() + "\n\n")
 
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("(esc: cancelar • enter: continuar)"))
+	body.WriteString(footerStyle.Render("(esc: cancel • enter: continue)"))
 }
 
 // renderWatchConfirmDelete renders the confirmation to stop watching a folder
 func (m Model) renderWatchConfirmDelete(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" DEJAR DE VIGILAR ") + "\n\n")
+	body.WriteString(titleStyle.Render(" STOP WATCHING ") + "\n\n")
 
 	w := m.configBackup.Watches[m.watchesCursor]
-	fmt.Fprintf(body, "¿Dejar de vigilar la carpeta '%s'?\n\n", w.Source)
-	body.WriteString(mutedStyle.Render("No se borra ningún archivo: ni los originales ni los ya respaldados\nen el repositorio. Solo deja de respaldarse automáticamente.") + "\n")
+	fmt.Fprintf(body, "Stop watching the folder '%s'?\n\n", w.Source)
+	body.WriteString(mutedStyle.Render("No file is deleted: neither the originals nor those already backed\nup in the repository. It just stops being backed up automatically.") + "\n")
 
-	body.WriteString(footerStyle.Render("\ns/y: confirmar • n/esc: cancelar"))
+	body.WriteString(footerStyle.Render("\ny: confirm • n/esc: cancel"))
 }
 
 // commandOrNone shows a hook command, or that there is none
 func commandOrNone(command string) string {
 	if command == "" {
-		return mutedStyle.Render("(ninguna)")
+		return mutedStyle.Render("(none)")
 	}
 	return command
 }
@@ -236,7 +236,7 @@ func (m Model) handleWatchCommandInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd
 		}
 		m.reloadConfigBackup()
 		m.state = watchesView
-		m.message = "Comandos guardados. El servicio aplica el cambio automáticamente."
+		m.message = "Commands saved. The service applies the change automatically."
 		m.isSuccess = true
 		return m, nil
 	}
@@ -246,20 +246,20 @@ func (m Model) handleWatchCommandInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd
 
 // renderWatchCommandInput renders both steps of editing the hook commands
 func (m Model) renderWatchCommandInput(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" COMANDOS DE VALIDACIÓN ") + "\n\n")
-	body.WriteString(headerStyle.Render("Carpeta: ") + itemStyle.Render(m.configBackup.Watches[m.watchesCursor].Source) + "\n\n")
+	body.WriteString(titleStyle.Render(" VALIDATION COMMANDS ") + "\n\n")
+	body.WriteString(headerStyle.Render("Folder: ") + itemStyle.Render(m.configBackup.Watches[m.watchesCursor].Source) + "\n\n")
 
 	if m.state == watchCheckInputView {
-		body.WriteString("Paso 1 de 2 - Comando que valida la configuración (vacío = ninguno):\n\n")
+		body.WriteString("Step 1 of 2 - Command that validates the configuration (empty = none):\n\n")
 		body.WriteString(m.watchInput.View() + "\n\n")
-		body.WriteString(mutedStyle.Render("Se ejecuta después de cada cambio y antes de restaurar. Si falla, el\ncambio se respalda igual, pero queda marcado como inválido.") + "\n")
+		body.WriteString(mutedStyle.Render("Runs after every change and before a restore. If it fails, the change\nis still backed up, but it is marked as invalid.") + "\n")
 	} else {
-		body.WriteString("Paso 2 de 2 - Comando que aplica la configuración (vacío = ninguno):\n\n")
+		body.WriteString("Step 2 of 2 - Command that applies the configuration (empty = none):\n\n")
 		body.WriteString(m.watchInput.View() + "\n\n")
-		body.WriteString(mutedStyle.Render("Solo se ejecuta al restaurar un archivo desde el historial, después\nde validar y antes de escribir el archivo.") + "\n")
+		body.WriteString(mutedStyle.Render("Only runs when a file is restored from the history, after validating\nand before writing the file.") + "\n")
 	}
-	body.WriteString(mutedStyle.Render("{dir} se reemplaza por la carpeta con la configuración. El comando se\nejecuta tal cual: si necesita privilegios, debe empezar con \"sudo -n\".") + "\n\n")
+	body.WriteString(mutedStyle.Render("{dir} is replaced by the folder with the configuration. The command runs\nas written: if it needs privileges, it must start with \"sudo -n\".") + "\n\n")
 
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("(esc: cancelar • enter: continuar)"))
+	body.WriteString(footerStyle.Render("(esc: cancel • enter: continue)"))
 }

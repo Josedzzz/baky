@@ -187,7 +187,8 @@ func History(repoDir string, n int) ([]Commit, error) {
 			continue
 		}
 		commit := Commit{Hash: parts[0], Date: parts[1], Message: parts[2]}
-		commit.Invalid = strings.HasSuffix(commit.Message, invalidMarker)
+		commit.Invalid = strings.HasSuffix(commit.Message, invalidMarker) ||
+			strings.HasSuffix(commit.Message, legacyInvalidMarker)
 		// Each automatic commit changes exactly one file
 		for _, line := range lines[1:] {
 			if line = strings.TrimSpace(line); line != "" {

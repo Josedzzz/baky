@@ -25,37 +25,37 @@ type menu struct {
 // menus holds the main menu and its submenus
 var menus = map[sessionState]menu{
 	menuView: {
-		title: " MENÚ PRINCIPAL ",
+		title: " MAIN MENU ",
 		entries: []menuEntry{
-			{"Respaldo de archivos", filesMenuView},
-			{"Respaldo de configuraciones", configMenuView},
-			{"Servicio", serviceMenuView},
-			{"Ayuda", helpView},
-			{"Salir", quitEntry},
+			{"File backup", filesMenuView},
+			{"Config backup", configMenuView},
+			{"Service", serviceMenuView},
+			{"Help", helpView},
+			{"Quit", quitEntry},
 		},
 	},
 	filesMenuView: {
-		title: " RESPALDO DE ARCHIVOS ",
+		title: " FILE BACKUP ",
 		entries: []menuEntry{
-			{"Gestionar rutas", managePathsView},
-			{"Respaldar ahora", backupFilesView},
-			{"Ver respaldos / Restaurar", viewBackupsView},
-			{"Destino de respaldo", configureBackupDestView},
+			{"Manage paths", managePathsView},
+			{"Back up now", backupFilesView},
+			{"View backups / Restore", viewBackupsView},
+			{"Backup destination", configureBackupDestView},
 		},
 	},
 	configMenuView: {
-		title: " RESPALDO DE CONFIGURACIONES ",
+		title: " CONFIG BACKUP ",
 		entries: []menuEntry{
-			{"Carpetas vigiladas", watchesView},
-			{"Historial de cambios", configHistoryView},
-			{"Repositorio", configRepoView},
+			{"Watched folders", watchesView},
+			{"Change history", configHistoryView},
+			{"Repository", configRepoView},
 		},
 	},
 	serviceMenuView: {
-		title: " SERVICIO ",
+		title: " SERVICE ",
 		entries: []menuEntry{
-			{"Estado del servicio", serviceStatusView},
-			{"Logs en vivo", logsView},
+			{"Service status", serviceStatusView},
+			{"Live logs", logsView},
 		},
 	},
 }
@@ -181,29 +181,29 @@ func (m Model) renderMenu(body *strings.Builder) {
 	}
 
 	if m.state == menuView {
-		body.WriteString(footerStyle.Render("\n↑/↓: navegar • enter: seleccionar • ?: ayuda • q: salir"))
+		body.WriteString(footerStyle.Render("\n↑/↓: navigate • enter: select • ?: help • q: quit"))
 	} else {
-		body.WriteString(footerStyle.Render("\n↑/↓: navegar • enter: seleccionar • esc: volver • q: salir"))
+		body.WriteString(footerStyle.Render("\n↑/↓: navigate • enter: select • esc: back • q: quit"))
 	}
 }
 
 // summary describes the current setup in the main menu
 func (m Model) summary() string {
-	dest := "sin configurar"
+	dest := "not configured"
 	if m.backupDest != "" {
 		dest = m.backupDest
 	}
 
-	serviceState := "consultando..."
+	serviceState := "checking..."
 	if m.serviceKnown {
 		serviceState = m.service.Status
 		if m.service.Active {
-			serviceState = "activo"
+			serviceState = "active"
 		} else if m.service.Status == "inactive" {
-			serviceState = "inactivo"
+			serviceState = "inactive"
 		}
 	}
 
-	return fmt.Sprintf("\nDestino de respaldo: %s\nRutas de archivos: %d • Carpetas vigiladas: %d\nServicio: %s",
+	return fmt.Sprintf("\nBackup destination: %s\nFile paths: %d • Watched folders: %d\nService: %s",
 		dest, len(m.paths), len(m.configBackup.Watches), serviceState)
 }

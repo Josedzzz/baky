@@ -1,51 +1,51 @@
 # baky
 
-Herramienta de terminal para respaldar la infraestructura del Grupo de Investigación GRID desde un solo lugar:
+Terminal tool for backing up the infrastructure of the GRID Research Group from a single place:
 
-- **Respaldo de archivos**: comprime archivos y carpetas en `tar.gz` hacia un destino de respaldo (por ejemplo un NAS), de forma manual, programada o al detectar cambios, y permite restaurarlos.
-- **Respaldo de configuraciones**: vigila carpetas de configuración (Firewall, VPN, DNS...) y registra cada cambio como un commit en un repositorio Git, con historial y `diff` línea por línea.
+- **File backup**: compresses files and folders into `tar.gz` archives sent to a backup destination (for example a NAS), manually, on a schedule or when changes are detected, and restores them.
+- **Config backup**: watches configuration folders (Firewall, VPN, DNS...) and records every change as a commit in a Git repository, with history and a line-by-line `diff`.
 
-Está escrita en Go con [Bubble Tea](https://github.com/charmbracelet/bubbletea). Es un único programa con dos modos: una interfaz de terminal (TUI) para el administrador y un servicio en segundo plano que ejecuta los respaldos automáticos.
+It is written in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea). It is a single program with two modes: a terminal interface (TUI) for the administrator and a background service that runs the automatic backups.
 
-Proyecto desarrollado en el marco del trabajo de grado **MAGITI**: *Modelo de Automatización para la Gestión de la Infraestructura de TI del Grupo de Investigación GRID*.
+Project developed as part of the **MAGITI** degree project: *Modelo de Automatización para la Gestión de la Infraestructura de TI del Grupo de Investigación GRID* (Automation Model for the IT Infrastructure Management of the GRID Research Group).
 
-## Origen
+## Origin
 
-baky unifica tres herramientas que antes se instalaban y mantenían por separado:
+baky unifies three tools that used to be installed and maintained separately:
 
-| Herramienta original | Qué hacía | Dónde quedó en baky |
+| Original tool | What it did | Where it ended up in baky |
 |---|---|---|
-| `baky` | Respaldo de archivos en `tar.gz` y restauración | `internal/backup`, `internal/restore` |
-| [`magiti-config-backup`](https://github.com/MiguelFVasquez/magiti-config-backup) | Daemon en Bash que versionaba configuraciones en Git | `internal/gitbackup`, reescrito en Go |
-| [`magiti-backup-tui`](https://github.com/MiguelFVasquez/magiti-backup-tui) | TUI para controlar ese daemon | Menús *Respaldo de configuraciones* y *Servicio* |
+| `baky` | File backup to `tar.gz` and restore | `internal/backup`, `internal/restore` |
+| [`magiti-config-backup`](https://github.com/MiguelFVasquez/magiti-config-backup) | Bash daemon that versioned configurations in Git | `internal/gitbackup`, rewritten in Go |
+| [`magiti-backup-tui`](https://github.com/MiguelFVasquez/magiti-backup-tui) | TUI to control that daemon | *Config backup* and *Service* menus |
 
-El administrador ahora instala un solo binario, un solo servicio y edita un solo archivo de configuración.
+The administrator now installs a single binary, a single service and edits a single configuration file.
 
-## Uso
+## Usage
 
 ```
-baky                               Abre la interfaz de terminal
-baky daemon                        Ejecuta los respaldos automáticos (lo usa systemd)
-baky import-magiti <config.json>   Importa las carpetas vigiladas del daemon magiti-config-backup
-baky help                          Muestra la ayuda
+baky                               Opens the terminal interface
+baky daemon                        Runs the automatic backups (used by systemd)
+baky import-magiti <config.json>   Imports the watched folders of the magiti-config-backup daemon
+baky help                          Shows the help
 ```
 
-### Menús de la interfaz
+### Interface menus
 
 ```
 BAKY
-  Respaldo de archivos         Gestionar rutas · Respaldar ahora · Ver respaldos / Restaurar · Destino de respaldo
-  Respaldo de configuraciones  Carpetas vigiladas · Historial de cambios · Repositorio
-  Servicio                     Estado del servicio · Logs en vivo
-  Ayuda
-  Salir
+  File backup     Manage paths · Back up now · View backups / Restore · Backup destination
+  Config backup   Watched folders · Change history · Repository
+  Service         Service status · Live logs
+  Help
+  Quit
 ```
 
-Teclas comunes: `↑/↓` o `k/j` para navegar, `enter` para seleccionar, `esc` para volver, `?` para la ayuda y `q` para salir.
+Common keys: `↑/↓` or `k/j` to navigate, `enter` to select, `esc` to go back, `?` for help and `q` to quit.
 
-Los respaldos automáticos los ejecuta el servicio, no la interfaz: se puede cerrar la TUI sin interrumpirlos. Los cambios hechos desde la TUI (agregar una ruta, vigilar una carpeta nueva) los aplica el servicio por sí solo, sin reiniciarlo.
+The automatic backups are run by the service, not by the interface: you can close the TUI without interrupting them. Changes made from the TUI (adding a path, watching a new folder) are applied by the service by itself, without restarting it.
 
-## Instalación rápida
+## Quick install
 
 ```bash
 git clone https://github.com/Josedzzz/baky.git
@@ -54,114 +54,116 @@ go build -o baky ./cmd
 sudo install -m 0755 baky /usr/local/bin/baky
 ```
 
-Requisitos: Go 1.24 o superior para compilar, `git` para el respaldo de configuraciones y `systemd` para el servicio.
+Requirements: Go 1.24 or later to build, `git` for the config backup and `systemd` for the service.
 
-La instalación completa (servicio, permisos y repositorio de configuraciones) está en [docs/instalacion.md](docs/instalacion.md).
+The full installation (service, permissions and config repository) is in [docs/installation.md](docs/installation.md).
 
-## Cómo funciona
+## How it works
 
-### Respaldo de archivos
+### File backup
 
-Cada ruta configurada tiene una frecuencia:
+Each configured path has a frequency:
 
-| Frecuencia | Cuándo se respalda |
+| Frequency | When it is backed up |
 |---|---|
-| Diario | Todos los días, durante la hora de las 3 AM |
-| Semanal | Los domingos, durante la hora de las 3 AM |
-| Al cambiar | Unos segundos después de que cambia un archivo de la ruta |
+| Daily | Every day, during the 3 AM hour |
+| Weekly | On Sundays, during the 3 AM hour |
+| On change | A few seconds after a file in the path changes |
 
-Los respaldos se guardan en el destino como `[nombre]_AAAAMMDD_HHMMSS.tar.gz`. Al restaurar se puede elegir la ubicación original u otra ruta, y qué hacer si ya hay archivos:
+Backups are stored at the destination as `[name]_YYYYMMDD_HHMMSS.tar.gz`. When restoring you can choose the original location or another path, and what to do if there are files already:
 
-- **Sobrescribir**: reemplaza los archivos que están en el respaldo y conserva los demás.
-- **Renombrar**: guarda lo existente con la fecha en el nombre y restaura el respaldo.
-- **Omitir**: no restaura si ya hay archivos.
+- **Overwrite**: replaces the files that are in the backup and keeps the rest.
+- **Rename**: keeps what exists under a name with the date and restores the backup.
+- **Skip**: does not restore if there are files already.
 
-Antes de restaurar, baky muestra qué cambiaría en el destino elegido:
-
-```
-CAMBIOS DE LA RESTAURACIÓN
-M se modifican: 1   + se crean: 1   = quedan igual: 1
-
-M informe.txt  (se modifica)
-+ borrado.txt  (se crea)
-= igual.txt  (queda igual)
-```
-
-Con `enter` sobre un archivo se ven sus diferencias línea por línea contra el archivo actual (en rojo lo que se quita, en verde lo que vuelve), y con `r` se continúa con la restauración. Esta vista previa no modifica nada. La comparación línea por línea usa `git`, y solo aplica a archivos de texto.
-
-El respaldo siempre se extrae primero a una carpeta temporal: un respaldo dañado nunca modifica lo que ya existe en el destino.
-
-### Respaldo de configuraciones
-
-Cada carpeta vigilada se asocia a una carpeta dentro del repositorio de configuraciones (por ejemplo `/etc/openvpn` → `vpn`). Cuando un archivo cambia, el servicio lo copia al repositorio, crea un commit por archivo y lo envía al remoto:
+Before restoring, baky shows what would change at the chosen destination:
 
 ```
-auto-backup: actualizado nat.conf (2026-07-24 21:46:14)
-auto-backup: eliminado config-test.conf (2026-07-24 21:39:09)
+RESTORE CHANGES
+M modified: 1   + created: 1   = unchanged: 1
+
+M report.txt  (modified)
++ deleted.txt  (created)
+= same.txt  (unchanged)
 ```
 
-Además:
+With `enter` on a file you see its line-by-line differences against the current file (in red what is removed, in green what comes back), and `r` continues with the restore. This preview changes nothing. The line-by-line comparison uses `git`, and only applies to text files.
 
-- Al iniciar, sincroniza todo: los cambios hechos mientras el servicio estaba detenido no se pierden.
-- Ignora los archivos temporales de los editores (`*.swp`, `*~`, `4913`).
-- Si el envío al remoto falla, los commits quedan en el repositorio local y se reintenta.
-- Si una carpeta vigilada deja de estar accesible, conserva lo ya respaldado.
+The backup is always extracted to a temporary folder first: a damaged backup never changes what already exists at the destination.
 
-#### Validar cada cambio
+### Config backup
 
-Cada carpeta vigilada puede tener dos comandos opcionales, que se definen con `c` en *Carpetas vigiladas*. `{dir}` se reemplaza por la carpeta que contiene la configuración:
+Each watched folder is mapped to a folder inside the config repository (for example `/etc/openvpn` → `vpn`). When a file changes, the service copies it to the repository, creates one commit per file and pushes it to the remote:
 
-| Comando | Ejemplo con Shorewall | Cuándo se ejecuta |
+```
+auto-backup: updated nat.conf (2026-07-24 21:46:14)
+auto-backup: deleted config-test.conf (2026-07-24 21:39:09)
+```
+
+In addition:
+
+- On startup it syncs everything: changes made while the service was stopped are not lost.
+- It ignores editor temporary files (`*.swp`, `*~`, `4913`).
+- If the push to the remote fails, the commits stay in the local repository and the push is retried.
+- If a watched folder stops being accessible, what was already backed up is kept.
+
+#### Validating every change
+
+Each watched folder can have two optional commands, set with `c` in *Watched folders*. `{dir}` is replaced by the folder that holds the configuration:
+
+| Command | Example with Shorewall | When it runs |
 |---|---|---|
-| Validación | `sudo -n shorewall check {dir}` | Después de cada cambio detectado, y antes de restaurar |
-| Aplicación | `sudo -n shorewall try {dir}` | Solo al restaurar un archivo desde el historial |
+| Validation | `sudo -n shorewall check {dir}` | After every detected change, and before a restore |
+| Apply | `sudo -n shorewall try {dir}` | Only when a file is restored from the history |
 
-Cuando un cambio no pasa la validación, baky lo respalda igual (el respaldo refleja lo que hay en el disco), pero lo marca: el commit termina en `[validación fallida]`, guarda el error del validador, aparece en rojo en el historial y queda una advertencia en el log. Así un error de sintaxis se conoce a los pocos segundos de guardarlo, antes de que alguien reinicie el servicio.
+When a change does not pass validation, baky still backs it up (the backup reflects what is on disk), but marks it: the commit ends with `[validation failed]`, stores the validator's error, shows up in red in the history and leaves a warning in the log. This way a syntax error is known a few seconds after it is saved, before anyone restarts the service.
 
-baky nunca aplica por su cuenta un cambio que detecta: solo lo valida.
+baky never applies a change it detects on its own: it only validates it.
 
-Los comandos se ejecutan tal como están escritos, sin intérprete de comandos. Si necesitan privilegios deben empezar con `sudo -n`, y el usuario del servicio debe tener ese permiso sin contraseña (ver [docs/instalacion.md](docs/instalacion.md)).
+The commands run exactly as written, without a shell. If they need privileges they must start with `sudo -n`, and the service user must have that permission without a password (see [docs/installation.md](docs/installation.md)).
 
-#### Restaurar una configuración anterior
+#### Restoring an earlier configuration
 
-En *Respaldo de configuraciones → Historial de cambios* cada línea es un cambio respaldado. Al elegir uno con `enter`, baky compara el archivo actual con la versión guardada en ese cambio y muestra qué pasaría al restaurarla:
+In *Config backup → Change history* each line is a backed-up change. When you pick one with `enter`, baky compares the current file with the version saved in that change and shows what restoring it would do:
 
 ```
-── Cambios desde la línea 1 del archivo actual ──
+── Changes from line 1 of the current file ──
   -A INPUT -p tcp --dport 22 -j ACCEPT
-- -A INPUT -p tcp --dport 8080 -j ACCEPT      línea actual que se quita
-+ -A INPUT -p tcp --dport 80 -j ACCEPT        línea que vuelve
+- -A INPUT -p tcp --dport 8080 -j ACCEPT      current line that is removed
++ -A INPUT -p tcp --dport 80 -j ACCEPT        line that comes back
   -A INPUT -p tcp --dport 443 -j ACCEPT
 ```
 
-Con `r` se restaura esa versión, previa confirmación. Si la carpeta tiene comandos de validación y aplicación, la restauración no toca la configuración real hasta saber que es buena:
+`r` restores that version, after confirmation. If the folder has validation and apply commands, the restore does not touch the real configuration until it knows it is good:
 
-1. Copia la carpeta a un directorio temporal y pone ahí la versión a restaurar.
-2. Ejecuta la validación sobre esa copia. Si falla, se detiene.
-3. Ejecuta la aplicación sobre esa copia. Si falla, se detiene.
-4. Solo entonces escribe el archivo en la carpeta vigilada, conservando su dueño y sus permisos. Si el usuario no puede escribir ahí, lo instala con `sudo`.
+1. It copies the folder to a temporary directory and puts the version to restore there.
+2. It runs the validation on that copy. If it fails, it stops.
+3. It runs the apply command on that copy. If it fails, it stops.
+4. Only then does it write the file to the watched folder, keeping its owner and permissions. If the user cannot write there, it installs the file with `sudo`.
 
-El servicio detecta la restauración y la registra como un cambio más, de modo que también se puede deshacer. Si el cambio elegido eliminó el archivo, no contiene una versión que restaurar: se elige uno anterior.
+The service detects the restore and records it as one more change, so it can also be undone. If the chosen change deleted the file, it holds no version to restore: pick an earlier one.
 
-El repositorio de configuraciones es un repositorio dedicado, separado del código. En el GRID es [`grid-config-data`](https://github.com/MiguelFVasquez/grid-config-data).
+The config repository is a dedicated repository, separate from the code. At GRID it is [`grid-config-data`](https://github.com/MiguelFVasquez/grid-config-data).
 
-## Archivos
+Commits made before the messages were translated to English (`auto-backup: actualizado ...`, `[validación fallida]`) still show up in the history, and invalid ones are still marked.
 
-Todos viven en `~/.config/baky/` del usuario que ejecuta baky. La variable `BAKY_CONFIG` permite usar otra ubicación para `config.json`; los demás archivos lo acompañan.
+## Files
 
-| Archivo | Contenido |
+They all live in `~/.config/baky/` of the user that runs baky. The `BAKY_CONFIG` variable lets you use another location for `config.json`; the other files go next to it.
+
+| File | Contents |
 |---|---|
-| `config.json` | Ajustes: destino, rutas, repositorio y carpetas vigiladas |
-| `state.json` | Historial de respaldos y restauraciones, último respaldo de cada ruta |
-| `baky.log` | Registro de actividad del servicio |
+| `config.json` | Settings: destination, paths, repository and watched folders |
+| `state.json` | Backup and restore history, last backup of each path |
+| `baky.log` | Activity log of the service |
 
-Ejemplo de `config.json`:
+Example `config.json`:
 
 ```json
 {
-  "nas_path": "/mnt/nas/respaldos",
+  "nas_path": "/mnt/nas/backups",
   "backup_paths": [
-    { "path": "/home/grid/documentos", "frequency": "daily" },
+    { "path": "/home/grid/documents", "frequency": "daily" },
     { "path": "/etc/nginx/nginx.conf", "frequency": "on_change" }
   ],
   "config_backup": {
@@ -180,158 +182,158 @@ Ejemplo de `config.json`:
 }
 ```
 
-No es necesario editarlo a mano: todo se configura desde la interfaz.
+You don't need to edit it by hand: everything is configured from the interface.
 
-## Estructura del proyecto
+## Project structure
 
 ```
 baky/
-├── cmd/main.go            Punto de entrada: TUI, daemon e importación
+├── cmd/main.go            Entry point: TUI, daemon and import
 ├── internal/
-│   ├── backup/            Respaldo de archivos (tar.gz) y su programación
-│   ├── restore/           Listado, comparación y restauración de respaldos
-│   ├── gitbackup/         Respaldo versionado de configuraciones en Git
-│   ├── daemon/            Servicio: ejecuta ambos motores y recarga la configuración
-│   ├── service/           Control del servicio systemd
-│   ├── config/            Configuración y estado compartidos entre TUI y servicio
-│   ├── logging/           Escritura y lectura del log del servicio
-│   ├── watch/             Vigilancia recursiva de carpetas (fsnotify)
-│   ├── textdiff/          Comparación línea por línea de dos versiones de un archivo
-│   └── tui/               Interfaz de terminal, un archivo por pantalla
-├── deploy/                Unidad de systemd y regla de sudoers
-└── docs/                  Instalación y registros de pruebas
+│   ├── backup/            File backup (tar.gz) and its scheduling
+│   ├── restore/           Listing, comparing and restoring backups
+│   ├── gitbackup/         Versioned config backup in Git
+│   ├── daemon/            Service: runs both engines and reloads the configuration
+│   ├── service/           Control of the systemd service
+│   ├── config/            Configuration and state shared by the TUI and the service
+│   ├── logging/           Writing and reading the service log
+│   ├── watch/             Recursive folder watching (fsnotify)
+│   ├── textdiff/          Line-by-line comparison of two versions of a file
+│   └── tui/               Terminal interface, one file per screen
+├── deploy/                systemd unit and sudoers rule
+└── docs/                  Installation and test logs
 ```
 
-El código (identificadores y comentarios) está en inglés; la interfaz y la documentación, en español.
+The code, the interface and the documentation are all in English.
 
-## Pruebas
+## Testing
 
-### Pruebas automáticas
+### Automated tests
 
 ```bash
-go test ./...          # todas las pruebas
-go test -race ./...    # además detecta condiciones de carrera
-go vet ./...           # análisis estático
+go test ./...          # all tests
+go test -race ./...    # also detects race conditions
+go vet ./...           # static analysis
 ```
 
-No usan la red ni tocan la configuración real: cada prueba trabaja en carpetas temporales, y el respaldo de configuraciones se prueba contra un repositorio Git local que hace de remoto.
+They do not use the network or touch the real configuration: each test works in temporary folders, and the config backup is tested against a local Git repository that acts as the remote.
 
-| Paquete | Qué cubren sus pruebas |
+| Package | What its tests cover |
 |---|---|
-| `internal/backup` | Creación del `tar.gz` (carpetas, archivo único, enlaces simbólicos) y cuándo toca un respaldo programado |
-| `internal/restore` | Restauración con sobrescribir, renombrar y omitir; respaldo dañado; archivo único; vista previa de los cambios |
-| `internal/gitbackup` | Crear, modificar, eliminar y renombrar archivos; subcarpetas; carpetas movidas; archivos temporales; fallo y reintento de push; validación de cada cambio; comparar y restaurar una versión anterior con validación previa |
-| `internal/daemon` | El servicio completo con ambos motores y un cambio de configuración en caliente |
-| `internal/config` | Guardado, historial en `state.json`, migración de configuraciones antiguas, archivo dañado, carpetas vigiladas |
-| `internal/tui` | Navegación por los menús y los flujos principales, enviando teclas al modelo |
-| `internal/logging`, `internal/watch`, `internal/textdiff` | Formato y lectura del log; vigilancia recursiva; comparación línea por línea |
+| `internal/backup` | Creating the `tar.gz` (folders, single file, symlinks) and when a scheduled backup is due |
+| `internal/restore` | Restore with overwrite, rename and skip; damaged backup; single file; preview of the changes |
+| `internal/gitbackup` | Creating, modifying, deleting and renaming files; subfolders; moved folders; temporary files; push failure and retry; validating every change; comparing and restoring an earlier version with prior validation |
+| `internal/daemon` | The whole service with both engines and a live configuration change |
+| `internal/config` | Saving, history in `state.json`, migrating old configurations, damaged file, watched folders |
+| `internal/tui` | Navigating the menus and the main flows, by sending keys to the model |
+| `internal/logging`, `internal/watch`, `internal/textdiff` | Log format and reading; recursive watching; line-by-line comparison |
 
-### Probar a mano sin instalar nada
+### Manual testing without installing anything
 
-Se puede probar todo en una carpeta temporal, sin systemd, sin `sudo` y sin tocar `~/.config/baky`. La variable `BAKY_CONFIG` hace que baky use una configuración aparte.
+You can test everything in a temporary folder, without systemd, without `sudo` and without touching `~/.config/baky`. The `BAKY_CONFIG` variable makes baky use a separate configuration.
 
-**1. Preparar el entorno de prueba**
+**1. Prepare the test environment**
 
 ```bash
 go build -o baky ./cmd
 
-export PRUEBA=/tmp/baky-prueba
-export BAKY_CONFIG=$PRUEBA/cfg/config.json
-mkdir -p $PRUEBA/cfg $PRUEBA/etc/firewall $PRUEBA/docs $PRUEBA/nas
+export TEST=/tmp/baky-test
+export BAKY_CONFIG=$TEST/cfg/config.json
+mkdir -p $TEST/cfg $TEST/etc/firewall $TEST/docs $TEST/nas
 
-# Un repositorio "remoto" local y su clon, que hace de repositorio de configuraciones
-git init --bare --initial-branch=main $PRUEBA/remoto.git
-git init --initial-branch=main $PRUEBA/repo
-git -C $PRUEBA/repo remote add origin $PRUEBA/remoto.git
+# A local "remote" repository and its clone, which acts as the config repository
+git init --bare --initial-branch=main $TEST/remote.git
+git init --initial-branch=main $TEST/repo
+git -C $TEST/repo remote add origin $TEST/remote.git
 
-echo "regla 1" > $PRUEBA/etc/firewall/reglas.conf
-echo "hola" > $PRUEBA/docs/informe.txt
+echo "rule 1" > $TEST/etc/firewall/rules.conf
+echo "hello" > $TEST/docs/report.txt
 ```
 
-**2. Iniciar el servicio en una terminal**
+**2. Start the service in a terminal**
 
 ```bash
 ./baky daemon
 ```
 
-Queda en primer plano mostrando el log. Se detiene con `Ctrl+C`.
+It stays in the foreground showing the log. Stop it with `Ctrl+C`.
 
-**3. Abrir la interfaz en otra terminal**
+**3. Open the interface in another terminal**
 
 ```bash
-export PRUEBA=/tmp/baky-prueba
-export BAKY_CONFIG=$PRUEBA/cfg/config.json
+export TEST=/tmp/baky-test
+export BAKY_CONFIG=$TEST/cfg/config.json
 ./baky
 ```
 
-El menú principal mostrará el servicio como inactivo: es lo esperado, porque en esta prueba el daemon no corre bajo systemd. Por lo mismo, las teclas de iniciar y detener de *Servicio → Estado del servicio* no aplican aquí.
+The main menu will show the service as inactive: that is expected, because in this test the daemon is not running under systemd. For the same reason, the start and stop keys of *Service → Service status* do not apply here.
 
-**4. Probar el respaldo de configuraciones**
+**4. Test the config backup**
 
-1. *Respaldo de configuraciones → Repositorio*: `e`, escribir `/tmp/baky-prueba/repo`, `enter`.
-2. *Respaldo de configuraciones → Carpetas vigiladas*: `a`, escribir `/tmp/baky-prueba/etc/firewall`, `enter`, aceptar el nombre `firewall` con `enter`.
-3. En una tercera terminal, modificar, crear y borrar archivos:
-
-   ```bash
-   echo "regla 2" >> /tmp/baky-prueba/etc/firewall/reglas.conf
-   mkdir /tmp/baky-prueba/etc/firewall/extra
-   echo "nat" > /tmp/baky-prueba/etc/firewall/extra/nat.conf
-   rm /tmp/baky-prueba/etc/firewall/reglas.conf
-   ```
-
-4. Resultado esperado, a los pocos segundos de cada cambio:
-   - En *Historial de cambios* (`r` para refrescar): un commit por archivo, `auto-backup: actualizado ...` o `auto-backup: eliminado ...`.
-   - En *Historial de cambios*, `enter` sobre un cambio anterior muestra las diferencias con el archivo actual, y `r` lo restaura.
-   - En *Servicio → Logs en vivo*: `Commit realizado` y `Push exitoso`.
-   - En el remoto: `git -C /tmp/baky-prueba/remoto.git log --oneline main` muestra los mismos commits.
-
-Para probar la sincronización al iniciar: detener el daemon con `Ctrl+C`, cambiar un archivo de la carpeta vigilada y volver a iniciarlo. El cambio debe quedar respaldado al arrancar.
-
-**5. Probar el respaldo de archivos**
-
-1. *Respaldo de archivos → Destino de respaldo*: `e`, escribir `/tmp/baky-prueba/nas`, `enter`; `t` debe decir que es accesible.
-2. *Respaldo de archivos → Gestionar rutas*: `a`, escribir `/tmp/baky-prueba/docs`, `enter`.
-3. *Respaldo de archivos → Respaldar ahora*: `enter`. Debe aparecer un `docs_AAAAMMDD_HHMMSS.tar.gz` en `/tmp/baky-prueba/nas`.
-4. *Ver respaldos / Restaurar*: `enter` sobre el respaldo, `c`, escribir `/tmp/baky-prueba/restaurado`, `enter`. Aparece la lista de cambios de la restauración (aquí, `informe.txt` se crea); `r` para continuar y `enter` para confirmar. El archivo `informe.txt` debe aparecer en esa carpeta.
-5. Vista previa con diferencias: modificar el archivo original (`echo "otra linea" >> /tmp/baky-prueba/docs/informe.txt`), volver a *Ver respaldos / Restaurar*, `enter` sobre el respaldo y `o` (ubicación original). El archivo aparece como "se modifica"; `enter` muestra la línea que se quitaría.
-6. Respaldo al cambiar: en *Gestionar rutas* presionar `f` hasta ver `[al cambiar]`, luego modificar un archivo:
+1. *Config backup → Repository*: `e`, type `/tmp/baky-test/repo`, `enter`.
+2. *Config backup → Watched folders*: `a`, type `/tmp/baky-test/etc/firewall`, `enter`, accept the name `firewall` with `enter`.
+3. In a third terminal, modify, create and delete files:
 
    ```bash
-   echo "cambio" >> /tmp/baky-prueba/docs/informe.txt
+   echo "rule 2" >> /tmp/baky-test/etc/firewall/rules.conf
+   mkdir /tmp/baky-test/etc/firewall/extra
+   echo "nat" > /tmp/baky-test/etc/firewall/extra/nat.conf
+   rm /tmp/baky-test/etc/firewall/rules.conf
    ```
 
-   Unos 5 segundos después el daemon crea un nuevo `tar.gz`, y el log muestra `Respaldo por cambio iniciado` y `Respaldo completado`.
+4. Expected result, a few seconds after each change:
+   - In *Change history* (`r` to refresh): one commit per file, `auto-backup: updated ...` or `auto-backup: deleted ...`.
+   - In *Change history*, `enter` on an earlier change shows the differences with the current file, and `r` restores it.
+   - In *Service → Live logs*: `Commit created` and `Push succeeded`.
+   - In the remote: `git -C /tmp/baky-test/remote.git log --oneline main` shows the same commits.
 
-**6. Limpiar**
+To test the sync on startup: stop the daemon with `Ctrl+C`, change a file in the watched folder and start it again. The change must be backed up on startup.
+
+**5. Test the file backup**
+
+1. *File backup → Backup destination*: `e`, type `/tmp/baky-test/nas`, `enter`; `t` should say it is accessible.
+2. *File backup → Manage paths*: `a`, type `/tmp/baky-test/docs`, `enter`.
+3. *File backup → Back up now*: `enter`. A `docs_YYYYMMDD_HHMMSS.tar.gz` should appear in `/tmp/baky-test/nas`.
+4. *View backups / Restore*: `enter` on the backup, `c`, type `/tmp/baky-test/restored`, `enter`. The list of restore changes appears (here, `report.txt` is created); `r` to continue and `enter` to confirm. The file `report.txt` should appear in that folder.
+5. Preview with differences: modify the original file (`echo "another line" >> /tmp/baky-test/docs/report.txt`), go back to *View backups / Restore*, `enter` on the backup and `o` (original location). The file shows up as "modified"; `enter` shows the line that would be removed.
+6. On-change backup: in *Manage paths* press `f` until you see `[on change]`, then modify a file:
+
+   ```bash
+   echo "change" >> /tmp/baky-test/docs/report.txt
+   ```
+
+   About 5 seconds later the daemon creates a new `tar.gz`, and the log shows `On-change backup started` and `Backup completed`.
+
+**6. Clean up**
 
 ```bash
-rm -rf /tmp/baky-prueba
-unset PRUEBA BAKY_CONFIG
+rm -rf /tmp/baky-test
+unset TEST BAKY_CONFIG
 ```
 
-La prueba sobre una instalación real (servicio de systemd y repositorio remoto) está en el paso 7 de [docs/instalacion.md](docs/instalacion.md).
+Testing on a real installation (systemd service and remote repository) is in step 7 of [docs/installation.md](docs/installation.md).
 
-## Pendiente
+## To do
 
-- Política de retención de respaldos (borrar los más antiguos automáticamente).
-- Cifrado de los respaldos y del repositorio de configuraciones.
-- Alertas ante fallos del servicio.
-- Comparación de versiones de respaldos desde la interfaz (`internal/restore/diff.go` ya calcula las diferencias).
-- Respaldo consistente de máquinas virtuales en ejecución.
+- Backup retention policy (delete the oldest ones automatically).
+- Encryption of the backups and of the config repository.
+- Alerts when the service fails.
+- Comparing backup versions from the interface (`internal/restore/diff.go` already computes the differences).
+- Consistent backup of running virtual machines.
 
-## Documentación
+## Documentation
 
-- [Instalación y puesta en marcha](docs/instalacion.md)
-- [Registro de pruebas del daemon de configuraciones](docs/pruebas-daemon.md)
-- [Registro de pruebas de la TUI](docs/pruebas-tui.md)
+- [Installation and setup](docs/installation.md)
+- [Config daemon test log](docs/daemon-tests.md)
+- [TUI test log](docs/tui-tests.md)
 
-## Autores
+## Authors
 
-- Jose D. Amaya — Investigador del Proyecto MAGITI
-- Juan M. Florez — Investigador del Proyecto MAGITI
+- Jose D. Amaya — MAGITI Project Researcher
+- Juan M. Florez — MAGITI Project Researcher
 
-Basado en entrevista con Luis E. Sepúlveda, Administrador de Sistemas GRID (22 de junio de 2026).
+Based on an interview with Luis E. Sepúlveda, GRID Systems Administrator (June 22, 2026).
 
-## Licencia
+## License
 
-MIT. Ver [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

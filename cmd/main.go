@@ -18,18 +18,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const usage = `baky - respaldo de archivos y configuraciones
+const usage = `baky - file and configuration backups
 
-Uso:
-  baky           Abre la interfaz de terminal
-  baky daemon    Ejecuta los respaldos automáticos en segundo plano (lo usa systemd)
-  baky backup <ruta>
-                 Respalda una ruta al destino configurado (NAS) y muestra el archivo creado
-  baky restore <respaldo.tar.gz> <destino> [sobrescribir|renombrar|omitir]
-                 Restaura un respaldo en el destino (por omisión, renombrar lo existente)
+Usage:
+  baky           Opens the terminal interface
+  baky daemon    Runs the automatic backups in the background (used by systemd)
+  baky backup <path>
+                 Backs up a path to the configured destination (NAS) and shows the file created
+  baky restore <backup.tar.gz> <destination> [overwrite|rename|skip]
+                 Restores a backup to the destination (by default, renames what exists)
   baky import-magiti <config.json>
-                 Importa las carpetas vigiladas del daemon magiti-config-backup
-  baky help      Muestra esta ayuda
+                 Imports the watched folders of the magiti-config-backup daemon
+  baky help      Shows this help
 `
 
 func main() {
@@ -52,7 +52,7 @@ func main() {
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
-		fmt.Fprintf(os.Stderr, "Comando desconocido: %s\n\n%s", command, usage)
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", command, usage)
 		os.Exit(2)
 	}
 }
@@ -88,28 +88,28 @@ func runDaemon() {
 // daemon into the configuration
 func importMagiti(args []string) {
 	if len(args) != 1 {
-		fmt.Fprint(os.Stderr, "Uso: baky import-magiti <ruta al config.json del daemon>\n")
+		fmt.Fprint(os.Stderr, "Usage: baky import-magiti <path to the daemon's config.json>\n")
 		os.Exit(2)
 	}
 
 	added, err := config.ImportMagitiConfig(args[0])
 	for _, w := range added {
-		fmt.Printf("Carpeta agregada: %s  →  %s\n", w.Source, w.Dest)
+		fmt.Printf("Folder added: %s  →  %s\n", w.Source, w.Dest)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("\nEl repositorio no se importa: configure el repositorio de configuraciones")
-	fmt.Println("desde la interfaz (Respaldo de configuraciones → Repositorio).")
+	fmt.Println("\nThe repository is not imported: set the config repository")
+	fmt.Println("from the interface (Config backup → Repository).")
 }
 
 // runBackupCmd backs up a single path to the configured NAS, without the TUI.
 // It uses the same engine as the interface and the daemon (backup.RunBackup).
 func runBackupCmd(args []string) {
 	if len(args) != 1 {
-		fmt.Fprint(os.Stderr, "Uso: baky backup <ruta>\n")
+		fmt.Fprint(os.Stderr, "Usage: baky backup <path>\n")
 		os.Exit(2)
 	}
 	source := args[0]
@@ -121,9 +121,9 @@ func runBackupCmd(args []string) {
 
 	// Report the archive just created (the newest one in the NAS folder).
 	if created := newestBackup(source); created != "" {
-		fmt.Printf("Respaldo creado: %s\n", created)
+		fmt.Printf("Backup created: %s\n", created)
 	} else {
-		fmt.Println("Respaldo creado.")
+		fmt.Println("Backup created.")
 	}
 }
 
@@ -162,24 +162,24 @@ func newestBackup(source string) string {
 // runRestoreCmd restores a backup to a destination, without the TUI.
 func runRestoreCmd(args []string) {
 	if len(args) < 2 || len(args) > 3 {
-		fmt.Fprint(os.Stderr, "Uso: baky restore <respaldo.tar.gz> <destino> [sobrescribir|renombrar|omitir]\n")
+		fmt.Fprint(os.Stderr, "Usage: baky restore <backup.tar.gz> <destination> [overwrite|rename|skip]\n")
 		os.Exit(2)
 	}
 	backupPath, destPath := args[0], args[1]
 
 	// Default: rename existing files, so a restore never deletes what is there.
 	action := restore.RestoreActionRename
-	actionName := "renombrar"
+	actionName := "rename"
 	if len(args) == 3 {
 		switch args[2] {
-		case "sobrescribir":
-			action, actionName = restore.RestoreActionOverwrite, "sobrescribir"
-		case "renombrar":
-			action, actionName = restore.RestoreActionRename, "renombrar"
-		case "omitir":
-			action, actionName = restore.RestoreActionSkip, "omitir"
+		case "overwrite":
+			action, actionName = restore.RestoreActionOverwrite, "overwrite"
+		case "rename":
+			action, actionName = restore.RestoreActionRename, "rename"
+		case "skip":
+			action, actionName = restore.RestoreActionSkip, "skip"
 		default:
-			fmt.Fprintf(os.Stderr, "Acción desconocida: %s (use sobrescribir, renombrar u omitir)\n", args[2])
+			fmt.Fprintf(os.Stderr, "Unknown action: %s (use overwrite, rename or skip)\n", args[2])
 			os.Exit(2)
 		}
 	}
@@ -197,5 +197,5 @@ func runRestoreCmd(args []string) {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Restauración completada: %d archivo(s) en %s\n", result.FilesRestored, destPath)
+	fmt.Printf("Restore completed: %d file(s) in %s\n", result.FilesRestored, destPath)
 }

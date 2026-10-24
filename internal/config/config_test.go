@@ -239,8 +239,8 @@ func TestImportMagitiConfig(t *testing.T) {
 
 	old := filepath.Join(t.TempDir(), "config.json")
 	os.WriteFile(old, []byte(`{
-  "watch_dir": "/home/miguel/simulacion-configs",
-  "repo_dir": "/home/miguel/proyectos/magiti-config-backup",
+  "watch_dir": "/home/miguel/simulation-configs",
+  "repo_dir": "/home/miguel/projects/magiti-config-backup",
   "carpetas": {"vpn": "vpn", "firewall": "firewall", "dns2": "dns2"}
 }`), 0o644)
 
@@ -254,9 +254,9 @@ func TestImportMagitiConfig(t *testing.T) {
 
 	cb, _ := GetConfigBackup()
 	want := []WatchConfig{
-		{Source: "/home/miguel/simulacion-configs/dns2", Dest: "dns2"},
-		{Source: "/home/miguel/simulacion-configs/firewall", Dest: "firewall"},
-		{Source: "/home/miguel/simulacion-configs/vpn", Dest: "vpn"},
+		{Source: "/home/miguel/simulation-configs/dns2", Dest: "dns2"},
+		{Source: "/home/miguel/simulation-configs/firewall", Dest: "firewall"},
+		{Source: "/home/miguel/simulation-configs/vpn", Dest: "vpn"},
 	}
 	if len(cb.Watches) != 3 || cb.Watches[0] != want[0] || cb.Watches[1] != want[1] || cb.Watches[2] != want[2] {
 		t.Errorf("unexpected watches: %+v", cb.Watches)

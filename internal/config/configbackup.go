@@ -34,7 +34,7 @@ func ValidateWatchCommand(command string) error {
 		return nil
 	}
 	if !strings.Contains(command, DirPlaceholder) {
-		return fmt.Errorf("el comando debe incluir %s, que se reemplaza por la carpeta de la configuración", DirPlaceholder)
+		return fmt.Errorf("the command must include %s, which is replaced by the folder of the configuration", DirPlaceholder)
 	}
 	return nil
 }
@@ -56,7 +56,7 @@ func SetWatchCommands(source, check, apply string) error {
 				return nil
 			}
 		}
-		return fmt.Errorf("la carpeta '%s' no está siendo vigilada", source)
+		return fmt.Errorf("the folder '%s' is not being watched", source)
 	})
 }
 
@@ -75,10 +75,10 @@ var destNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$`)
 // repository: one path element, no separators, nothing that escapes the repo
 func ValidateDestName(name string) error {
 	if name == "" {
-		return fmt.Errorf("el nombre no puede estar vacío")
+		return fmt.Errorf("the name cannot be empty")
 	}
 	if name == ".git" || !destNamePattern.MatchString(name) {
-		return fmt.Errorf("solo se permiten letras, números, '.', '-' y '_' (máx. 50 caracteres, debe empezar con letra o número)")
+		return fmt.Errorf("only letters, numbers, '.', '-' and '_' are allowed (max. 50 characters, must start with a letter or number)")
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func GetConfigBackup() (ConfigBackup, error) {
 // SaveConfigRepo sets the repository that receives the config backups
 func SaveConfigRepo(repoDir string) error {
 	if !filepath.IsAbs(repoDir) {
-		return fmt.Errorf("la ruta del repositorio debe ser absoluta: %s", repoDir)
+		return fmt.Errorf("the repository path must be absolute: %s", repoDir)
 	}
 	return update(func(cfg *Config) error {
 		cfg.ConfigBackup.RepoDir = filepath.Clean(repoDir)
@@ -113,7 +113,7 @@ func SaveConfigRepo(repoDir string) error {
 // AddWatch starts watching source and maps it to the dest folder of the repository
 func AddWatch(source, dest string) error {
 	if !filepath.IsAbs(source) {
-		return fmt.Errorf("la ruta a vigilar debe ser absoluta: %s", source)
+		return fmt.Errorf("the path to watch must be absolute: %s", source)
 	}
 	source = filepath.Clean(source)
 	if err := ValidateDestName(dest); err != nil {
@@ -123,10 +123,10 @@ func AddWatch(source, dest string) error {
 	return update(func(cfg *Config) error {
 		for _, w := range cfg.ConfigBackup.Watches {
 			if w.Source == source {
-				return fmt.Errorf("la carpeta '%s' ya está siendo vigilada", source)
+				return fmt.Errorf("the folder '%s' is already being watched", source)
 			}
 			if w.Dest == dest {
-				return fmt.Errorf("el destino '%s' ya está en uso por '%s'", dest, w.Source)
+				return fmt.Errorf("the destination '%s' is already used by '%s'", dest, w.Source)
 			}
 		}
 		cfg.ConfigBackup.Watches = append(cfg.ConfigBackup.Watches, WatchConfig{Source: source, Dest: dest})
@@ -143,6 +143,6 @@ func RemoveWatch(source string) error {
 				return nil
 			}
 		}
-		return fmt.Errorf("la carpeta '%s' no está siendo vigilada", source)
+		return fmt.Errorf("the folder '%s' is not being watched", source)
 	})
 }

@@ -45,7 +45,7 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			default:
 				p.Frequency = config.FreqDaily
 			}
-			m.savePaths("Frecuencia actualizada")
+			m.savePaths("Frequency updated")
 		}
 	case "d":
 		if len(m.paths) > 0 {
@@ -53,7 +53,7 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.pathsCursor >= len(m.paths) && m.pathsCursor > 0 {
 				m.pathsCursor--
 			}
-			m.savePaths("Ruta eliminada")
+			m.savePaths("Path deleted")
 		}
 	case "esc":
 		return m.back(filesMenuView)
@@ -65,7 +65,7 @@ func (m Model) handleManagePathsUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // the change by itself when the config file changes.
 func (m *Model) savePaths(done string) {
 	if err := config.SavePaths(m.paths); err != nil {
-		m.message = "No se pudo guardar: " + err.Error()
+		m.message = "Could not save: " + err.Error()
 		m.isSuccess = false
 		return
 	}
@@ -85,12 +85,12 @@ func (m Model) handleInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		val := strings.TrimSpace(m.pathInput.Value())
 		if val != "" {
-			done := "Ruta agregada"
+			done := "Path added"
 			if m.editingIndex == -1 {
 				m.paths = append(m.paths, config.BackupPathConfig{Path: val, Frequency: config.FreqDaily})
 			} else {
 				m.paths[m.editingIndex].Path = val
-				done = "Ruta actualizada"
+				done = "Path updated"
 			}
 			m.savePaths(done)
 			m.state = managePathsView
@@ -106,50 +106,50 @@ func (m Model) handleInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func frequencyLabel(frequency string) string {
 	switch frequency {
 	case config.FreqWeekly:
-		return "semanal"
+		return "weekly"
 	case config.FreqOnChange:
-		return "al cambiar"
+		return "on change"
 	default:
-		return "diario"
+		return "daily"
 	}
 }
 
 // renderManagePaths renders the manage paths screen
 func (m Model) renderManagePaths(body *strings.Builder) {
-	body.WriteString(titleStyle.Render(" GESTIONAR RUTAS DE RESPALDO ") + "\n\n")
+	body.WriteString(titleStyle.Render(" MANAGE BACKUP PATHS ") + "\n\n")
 	if len(m.paths) == 0 {
-		body.WriteString("Aún no hay rutas agregadas.\n\n")
+		body.WriteString("No paths added yet.\n\n")
 	} else {
 		for i, p := range m.paths {
 			style := itemStyle
 			if m.pathsCursor == i {
 				style = selectedItemStyle
 			}
-			last := "nunca"
+			last := "never"
 			if !p.LastBackup.IsZero() {
 				last = p.LastBackup.Format("2006-01-02 15:04")
 			}
 
-			line := fmt.Sprintf("%-20s [%s] (último: %s)", p.Path, frequencyLabel(p.Frequency), last)
+			line := fmt.Sprintf("%-20s [%s] (last: %s)", p.Path, frequencyLabel(p.Frequency), last)
 
 			body.WriteString(style.Render(line) + "\n")
 		}
 		body.WriteString("\n")
 	}
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("a: agregar • e: editar • f: cambiar frecuencia • d: eliminar • esc: volver"))
+	body.WriteString(footerStyle.Render("a: add • e: edit • f: change frequency • d: delete • esc: back"))
 }
 
 // renderPathInput renders the path input screen
 func (m Model) renderPathInput(body *strings.Builder) {
-	title := " AGREGAR RUTA DE RESPALDO "
+	title := " ADD BACKUP PATH "
 	if m.editingIndex != -1 {
-		title = " EDITAR RUTA DE RESPALDO "
+		title = " EDIT BACKUP PATH "
 	}
 	body.WriteString(titleStyle.Render(title) + "\n\n")
 	fmt.Fprintf(body,
-		"Ruta del archivo o carpeta:\n\n%s\n\n%s",
+		"Path of the file or folder:\n\n%s\n\n%s",
 		m.pathInput.View(),
-		footerStyle.Render("(esc: cancelar • enter: guardar)"),
+		footerStyle.Render("(esc: cancel • enter: save)"),
 	)
 }

@@ -16,7 +16,10 @@ const (
 
 	// invalidMarker ends the message of a commit whose configuration did
 	// not pass the validation command of its watch
-	invalidMarker = "[validación fallida]"
+	invalidMarker = "[validation failed]"
+	// legacyInvalidMarker is the marker of commits made before the
+	// messages were translated to English
+	legacyInvalidMarker = "[validación fallida]"
 
 	// hookTimeout bounds a validation or apply command
 	hookTimeout = 5 * time.Minute
@@ -29,14 +32,14 @@ func ValidateHook(command string) error {
 		return nil
 	}
 	if !strings.Contains(command, dirPlaceholder) {
-		return fmt.Errorf("el comando debe incluir %s, que se reemplaza por la carpeta de la configuración", dirPlaceholder)
+		return fmt.Errorf("the command must include %s, which is replaced by the folder of the configuration", dirPlaceholder)
 	}
 	return nil
 }
 
 // errHookNotRun wraps the errors of a hook that could not be started at
 // all, as opposed to one that ran and reported a failure
-var errHookNotRun = errors.New("no se pudo ejecutar el comando")
+var errHookNotRun = errors.New("could not run the command")
 
 // runHook runs a hook command on a directory and returns what it printed.
 // The command is split on spaces and executed directly, without a shell,
@@ -63,7 +66,7 @@ var runHook = func(command, dir string) (string, error) {
 		return output, nil
 	case errors.As(err, &exitErr):
 		// The command ran and rejected the configuration
-		return output, fmt.Errorf("%s terminó con error (código %d)", args[0], exitErr.ExitCode())
+		return output, fmt.Errorf("%s exited with an error (code %d)", args[0], exitErr.ExitCode())
 	default:
 		return output, fmt.Errorf("%w %q: %v", errHookNotRun, args[0], err)
 	}

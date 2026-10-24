@@ -176,19 +176,19 @@ type Model struct {
 // NewModel init and returns a new Model with default values
 func NewModel() Model {
 	ti := textinput.New()
-	ti.Placeholder = "/ruta/a/respaldar"
+	ti.Placeholder = "/path/to/back/up"
 
 	di := textinput.New()
-	di.Placeholder = "/ruta/del/destino/de/respaldos"
+	di.Placeholder = "/path/to/backup/destination"
 
 	ri := textinput.New()
-	ri.Placeholder = "/ruta/donde/restaurar"
+	ri.Placeholder = "/path/to/restore/to"
 
 	wi := textinput.New()
 	wi.Placeholder = "/etc/openvpn"
 
 	pi := textinput.New()
-	pi.Placeholder = "/ruta/al/repositorio/de/configuraciones"
+	pi.Placeholder = "/path/to/config/repository"
 
 	// A config that cannot be read shows as empty; config.Warning() explains why
 	paths, _ := config.GetPaths()
@@ -214,7 +214,7 @@ func NewModel() Model {
 		logsView:        viewport.New(0, 0),
 	}
 	if warning := config.Warning(); warning != "" {
-		m.message = "Aviso: " + warning
+		m.message = "Warning: " + warning
 	}
 	return m
 }

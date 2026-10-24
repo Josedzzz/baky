@@ -17,22 +17,22 @@ var backupFilenamePattern = regexp.MustCompile(`^(.+?)_(\d{8})_(\d{6})\.tar\.gz$
 // organized by source path
 func ScanBackups(nasPath string) (map[string]*BackupList, error) {
 	if nasPath == "" {
-		return nil, fmt.Errorf("el destino de respaldo no está configurado")
+		return nil, fmt.Errorf("the backup destination is not configured")
 	}
 
 	// Check if NAS path exists
 	info, err := os.Stat(nasPath)
 	if err != nil {
-		return nil, fmt.Errorf("no se puede acceder al destino de respaldo: %w", err)
+		return nil, fmt.Errorf("cannot access the backup destination: %w", err)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("el destino de respaldo no es una carpeta: %s", nasPath)
+		return nil, fmt.Errorf("the backup destination is not a folder: %s", nasPath)
 	}
 
 	// Read all files in NAS directory
 	entries, err := os.ReadDir(nasPath)
 	if err != nil {
-		return nil, fmt.Errorf("no se puede leer el destino de respaldo: %w", err)
+		return nil, fmt.Errorf("cannot read the backup destination: %w", err)
 	}
 
 	backupsBySource := make(map[string]*BackupList)

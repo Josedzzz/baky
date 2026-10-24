@@ -108,7 +108,7 @@ func Restore(backupPath, destPath string, action RestoreAction) (*RestoreResult,
 
 	fileName, isSingleFile, err := singleFileBackup(backupPath)
 	if err != nil {
-		return fail("No se pudo leer el respaldo: ", err)
+		return fail("Could not read the backup: ", err)
 	}
 	if isSingleFile {
 		return restoreSingleFile(result, fileName, fail)
@@ -117,29 +117,29 @@ func Restore(backupPath, destPath string, action RestoreAction) (*RestoreResult,
 	destInfo, statErr := os.Lstat(destPath)
 	destExists := statErr == nil
 	if statErr != nil && !os.IsNotExist(statErr) {
-		return fail("No se pudo revisar el destino: ", statErr)
+		return fail("Could not inspect the destination: ", statErr)
 	}
 	if destExists && !destInfo.IsDir() {
-		return fail("No se pudo revisar el destino: ", fmt.Errorf("%s existe y no es una carpeta", destPath))
+		return fail("Could not inspect the destination: ", fmt.Errorf("%s exists and is not a folder", destPath))
 	}
 
 	// Check for conflicts
 	conflicts, err := CheckForConflicts(destPath)
 	if err != nil {
-		return fail("No se pudo revisar el destino: ", err)
+		return fail("Could not inspect the destination: ", err)
 	}
 
 	if len(conflicts) > 0 && action == RestoreActionSkip {
 		// Don't restore, report as skipped
 		result.Success = true
 		result.FilesSkipped = len(conflicts)
-		result.Message = fmt.Sprintf("Restauración omitida: hay %d archivos existentes en el destino", len(conflicts))
+		result.Message = fmt.Sprintf("Restore skipped: there are %d existing files at the destination", len(conflicts))
 		return result, nil
 	}
 
 	fileCount, err := countFilesInBackup(backupPath)
 	if err != nil {
-		return fail("No se pudo extraer el respaldo: ", err)
+		return fail("Could not extract the backup: ", err)
 	}
 
 	// With "rename" the existing destination is moved away as a whole and
@@ -152,20 +152,20 @@ func Restore(backupPath, destPath string, action RestoreAction) (*RestoreResult,
 	if replaceWhole {
 		stagingParent = filepath.Dir(destPath)
 		if err := os.MkdirAll(stagingParent, 0o755); err != nil {
-			return fail("No se pudo extraer el respaldo: ", fmt.Errorf("cannot create destination directory: %w", err))
+			return fail("Could not extract the backup: ", fmt.Errorf("cannot create destination directory: %w", err))
 		}
 	}
 	staging, err := os.MkdirTemp(stagingParent, stagingPrefix)
 	if err != nil {
-		return fail("No se pudo extraer el respaldo: ", fmt.Errorf("cannot create staging directory: %w", err))
+		return fail("Could not extract the backup: ", fmt.Errorf("cannot create staging directory: %w", err))
 	}
 	defer os.RemoveAll(staging)
 
 	if err := os.Chmod(staging, 0o755); err != nil {
-		return fail("No se pudo extraer el respaldo: ", err)
+		return fail("Could not extract the backup: ", err)
 	}
 	if err := ExtractBackup(backupPath, staging); err != nil {
-		return fail("No se pudo extraer el respaldo: ", err)
+		return fail("Could not extract the backup: ", err)
 	}
 
 	renamedTo := ""
@@ -173,7 +173,7 @@ func Restore(backupPath, destPath string, action RestoreAction) (*RestoreResult,
 		if destExists {
 			renamedTo = destPath + "_" + time.Now().Format("20060102_150405")
 			if err := os.Rename(destPath, renamedTo); err != nil {
-				return fail("No se pudo renombrar lo existente: ", err)
+				return fail("Could not rename the existing content: ", err)
 			}
 		}
 		if err := os.Rename(staging, destPath); err != nil {
@@ -181,20 +181,20 @@ func Restore(backupPath, destPath string, action RestoreAction) (*RestoreResult,
 				// Put the original content back where it was
 				os.Rename(renamedTo, destPath)
 			}
-			return fail("No se pudo extraer el respaldo: ", err)
+			return fail("Could not extract the backup: ", err)
 		}
 	} else if err := mergeDir(staging, destPath); err != nil {
-		return fail("No se pudo extraer el respaldo: ", err)
+		return fail("Could not extract the backup: ", err)
 	}
 
 	result.Success = true
 	result.FilesRestored = fileCount
-	result.Message = fmt.Sprintf("Se restauraron %d archivos en %s", fileCount, destPath)
+	result.Message = fmt.Sprintf("Restored %d files to %s", fileCount, destPath)
 	if fileCount == 1 {
-		result.Message = fmt.Sprintf("Se restauró 1 archivo en %s", destPath)
+		result.Message = fmt.Sprintf("Restored 1 file to %s", destPath)
 	}
 	if renamedTo != "" {
-		result.Message += fmt.Sprintf(" (lo existente se renombró a %s)", renamedTo)
+		result.Message += fmt.Sprintf(" (the existing content was renamed to %s)", renamedTo)
 	}
 
 	return result, nil
@@ -212,36 +212,36 @@ func restoreSingleFile(result *RestoreResult, fileName string, fail func(string,
 	_, statErr := os.Lstat(target)
 	targetExists := statErr == nil
 	if statErr != nil && !os.IsNotExist(statErr) {
-		return fail("No se pudo revisar el destino: ", statErr)
+		return fail("Could not inspect the destination: ", statErr)
 	}
 
 	if targetExists && result.Action == RestoreActionSkip {
 		result.Success = true
 		result.FilesSkipped = 1
-		result.Message = "Restauración omitida: el archivo ya existe en el destino"
+		result.Message = "Restore skipped: the file already exists at the destination"
 		return result, nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fail("No se pudo extraer el respaldo: ", fmt.Errorf("cannot create destination directory: %w", err))
+		return fail("Could not extract the backup: ", fmt.Errorf("cannot create destination directory: %w", err))
 	}
 
 	staging, err := os.MkdirTemp(filepath.Dir(target), stagingPrefix)
 	if err != nil {
-		return fail("No se pudo extraer el respaldo: ", fmt.Errorf("cannot create staging directory: %w", err))
+		return fail("Could not extract the backup: ", fmt.Errorf("cannot create staging directory: %w", err))
 	}
 	defer os.RemoveAll(staging)
 
 	staged := filepath.Join(staging, fileName)
 	if err := extractSingleFile(result.BackupPath, staged); err != nil {
-		return fail("No se pudo extraer el respaldo: ", err)
+		return fail("Could not extract the backup: ", err)
 	}
 
 	renamedTo := ""
 	if targetExists && result.Action == RestoreActionRename {
 		renamedTo = target + "_" + time.Now().Format("20060102_150405")
 		if err := os.Rename(target, renamedTo); err != nil {
-			return fail("No se pudo renombrar lo existente: ", err)
+			return fail("Could not rename the existing content: ", err)
 		}
 	}
 
@@ -250,14 +250,14 @@ func restoreSingleFile(result *RestoreResult, fileName string, fail func(string,
 			// Put the original file back where it was
 			os.Rename(renamedTo, target)
 		}
-		return fail("No se pudo extraer el respaldo: ", err)
+		return fail("Could not extract the backup: ", err)
 	}
 
 	result.Success = true
 	result.FilesRestored = 1
-	result.Message = fmt.Sprintf("Se restauró 1 archivo en %s", target)
+	result.Message = fmt.Sprintf("Restored 1 file to %s", target)
 	if renamedTo != "" {
-		result.Message += fmt.Sprintf(" (lo existente se renombró a %s)", renamedTo)
+		result.Message += fmt.Sprintf(" (the existing content was renamed to %s)", renamedTo)
 	}
 
 	return result, nil
@@ -336,21 +336,21 @@ func GetOriginalSourcePath(backup BackupInfo) string {
 func ValidateRestorePath(path string) error {
 	// Check if path is empty
 	if path == "" {
-		return fmt.Errorf("la ruta no puede estar vacía")
+		return fmt.Errorf("the path cannot be empty")
 	}
 
 	// Check if path is absolute
 	if !filepath.IsAbs(path) {
-		return fmt.Errorf("la ruta debe ser absoluta: %s", path)
+		return fmt.Errorf("the path must be absolute: %s", path)
 	}
 
 	// Check if parent directory exists
 	parentDir := filepath.Dir(path)
 	if _, err := os.Stat(parentDir); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("la carpeta padre no existe: %s", parentDir)
+			return fmt.Errorf("the parent folder does not exist: %s", parentDir)
 		}
-		return fmt.Errorf("no se puede acceder a la carpeta padre: %w", err)
+		return fmt.Errorf("cannot access the parent folder: %w", err)
 	}
 
 	return nil

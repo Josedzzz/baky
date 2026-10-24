@@ -52,7 +52,7 @@ func Files(currentPath, wantedPath string) ([]Line, error) {
 	if err != nil {
 		// Exit code 1 only means "the files differ"
 		if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
-			return nil, fmt.Errorf("no se pudo comparar el archivo (se necesita git): %w", err)
+			return nil, fmt.Errorf("could not compare the file (git is required): %w", err)
 		}
 	}
 	return parse(string(out)), nil
@@ -73,7 +73,7 @@ func parse(out string) []Line {
 			number, _ := strconv.Atoi(hunkHeader.FindStringSubmatch(line)[1])
 			lines = append(lines, Line{Kind: Hunk, Number: number})
 		case strings.HasPrefix(line, "Binary files"):
-			lines = append(lines, Line{Kind: Note, Text: "El archivo es binario: no se puede mostrar línea por línea."})
+			lines = append(lines, Line{Kind: Note, Text: "The file is binary: it cannot be shown line by line."})
 		case !inHunk:
 			// Header of the diff (file names, modes): not useful here
 		case strings.HasPrefix(line, "+"):
@@ -81,7 +81,7 @@ func parse(out string) []Line {
 		case strings.HasPrefix(line, "-"):
 			lines = append(lines, Line{Kind: Removed, Text: line[1:]})
 		case strings.HasPrefix(line, `\`):
-			lines = append(lines, Line{Kind: Note, Text: "(sin salto de línea al final del archivo)"})
+			lines = append(lines, Line{Kind: Note, Text: "(no newline at the end of the file)"})
 		default:
 			lines = append(lines, Line{Kind: Context, Text: strings.TrimPrefix(line, " ")})
 		}

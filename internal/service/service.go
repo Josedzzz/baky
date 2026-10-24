@@ -34,7 +34,7 @@ type State struct {
 // needs no privileges, so it never goes through sudo.
 func Query() State {
 	if _, err := exec.LookPath("systemctl"); err != nil {
-		return State{Status: "desconocido", Err: fmt.Errorf("systemctl no está disponible en este sistema")}
+		return State{Status: "unknown", Err: fmt.Errorf("systemctl is not available on this system")}
 	}
 
 	// is-active exits with an error code when the service is not active;
@@ -42,7 +42,7 @@ func Query() State {
 	out, _ := exec.Command("systemctl", "is-active", Name()).Output()
 	status := strings.TrimSpace(string(out))
 	if status == "" {
-		status = "desconocido"
+		status = "unknown"
 	}
 
 	detail, _ := exec.Command("systemctl", "status", Name(), "--no-pager", "-l").CombinedOutput()
@@ -79,7 +79,7 @@ func runAction(action string) error {
 		if detail == "" {
 			detail = err.Error()
 		}
-		return fmt.Errorf("no se pudo ejecutar '%s' sobre %s: %s", action, Name(), detail)
+		return fmt.Errorf("could not run '%s' on %s: %s", action, Name(), detail)
 	}
 	return nil
 }

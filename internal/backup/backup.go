@@ -22,13 +22,13 @@ import (
 func RunBackup(sourcePath string) error {
 	nasPath, err := config.GetNasPath()
 	if err != nil || nasPath == "" {
-		return fmt.Errorf("el destino de respaldo no está configurado")
+		return fmt.Errorf("the backup destination is not configured")
 	}
 
 	// Check if source path exists
 	if _, err := os.Stat(sourcePath); err != nil {
-		config.LogBackup(sourcePath, false, fmt.Sprintf("No se puede acceder a la ruta: %v", err))
-		return fmt.Errorf("no se puede acceder a la ruta: %v", err)
+		config.LogBackup(sourcePath, false, fmt.Sprintf("Cannot access the path: %v", err))
+		return fmt.Errorf("cannot access the path: %v", err)
 	}
 
 	// Create backup filename: [base_name]_[timestamp].tar.gz
@@ -47,7 +47,7 @@ func RunBackup(sourcePath string) error {
 		os.Remove(destPath)
 	}
 	if logErr := config.LogBackup(sourcePath, err == nil, msg); logErr != nil && err == nil {
-		return fmt.Errorf("respaldo creado, pero no se pudo actualizar el historial: %w", logErr)
+		return fmt.Errorf("backup created, but the history could not be updated: %w", logErr)
 	}
 
 	return err
@@ -171,12 +171,12 @@ func Run(ctx context.Context, logf logging.Func) error {
 	}()
 
 	backup := func(path, reason string) {
-		logf(logging.Info, fmt.Sprintf("Respaldo %s iniciado: %s", reason, path))
+		logf(logging.Info, fmt.Sprintf("%s backup started: %s", reason, path))
 		if err := RunBackup(path); err != nil {
-			logf(logging.Error, fmt.Sprintf("Respaldo fallido: %s (%v)", path, err))
+			logf(logging.Error, fmt.Sprintf("Backup failed: %s (%v)", path, err))
 			return
 		}
-		logf(logging.Info, fmt.Sprintf("Respaldo completado: %s", path))
+		logf(logging.Info, fmt.Sprintf("Backup completed: %s", path))
 	}
 
 	ticker := time.NewTicker(1 * time.Minute)
@@ -214,13 +214,13 @@ func Run(ctx context.Context, logf logging.Func) error {
 			}
 
 		case path := <-due:
-			backup(path, "por cambio")
+			backup(path, "On-change")
 
 		case now := <-ticker.C:
 			// Read the paths again: the last backup times change over time
 			current, err := config.GetPaths()
 			if err != nil {
-				logf(logging.Error, fmt.Sprintf("No se pudo leer la configuración: %v", err))
+				logf(logging.Error, fmt.Sprintf("Could not read the configuration: %v", err))
 				continue
 			}
 			for _, p := range current {
@@ -234,14 +234,14 @@ func Run(ctx context.Context, logf logging.Func) error {
 				if recent {
 					continue
 				}
-				backup(p.Path, "programado")
+				backup(p.Path, "Scheduled")
 			}
 
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return nil
 			}
-			logf(logging.Error, fmt.Sprintf("Error del vigilante de archivos: %v", err))
+			logf(logging.Error, fmt.Sprintf("File watcher error: %v", err))
 		}
 	}
 }
