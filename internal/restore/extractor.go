@@ -11,11 +11,22 @@ import (
 	"strings"
 )
 
+// verifyGzipTail drains the gzip reader to its end so its CRC32 and size
+// trailer are checked. The tar reader stops at the logical end of the archive,
+// before that trailer, so without this a corrupted backup would be restored as
+// if it were valid, with silently wrong contents, instead of failing.
+func verifyGzipTail(r *gzip.Reader) error {
+	if _, err := io.Copy(io.Discard, r); err != nil {
+		return fmt.Errorf("corrupt backup: %w", err)
+	}
+	return nil
+}
+
 // ExtractBackup extracts a tar.gz backup file to a destination directory
 // If the backup contains a single root directory, it extracts the contents of that directory
 // Otherwise, it extracts all files to the destination
 func ExtractBackup(backupPath, destPath string) error {
-	rootDir, singleRoot, err := inspectBackup(backupPath)
+	fileName, isSingleFile, err := singleFileBackup(backupPath)
 	if err != nil {
 		return err
 	}
@@ -24,7 +35,91 @@ func ExtractBackup(backupPath, destPath string) error {
 		return fmt.Errorf("cannot create destination directory: %w", err)
 	}
 
+	if isSingleFile {
+		return extractSingleFile(backupPath, filepath.Join(destPath, fileName))
+	}
+
+	rootDir, singleRoot, err := inspectBackup(backupPath)
+	if err != nil {
+		return err
+	}
+
 	return extractFiles(backupPath, destPath, rootDir, singleRoot)
+}
+
+// singleFileBackup reports whether the archive is the backup of one single
+// file (its only entry is a regular file) and returns the name of that file.
+// Older backups stored the file under the name ".", in which case the name
+// is recovered from the backup filename.
+func singleFileBackup(backupPath string) (string, bool, error) {
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return "", false, fmt.Errorf("cannot open backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return "", false, fmt.Errorf("cannot read gzip: %w", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+
+	first, err := tarReader.Next()
+	if err == io.EOF {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("error reading tar: %w", err)
+	}
+	if first.Typeflag != tar.TypeReg {
+		return "", false, nil
+	}
+
+	if _, err := tarReader.Next(); err != io.EOF {
+		if err != nil {
+			return "", false, fmt.Errorf("error reading tar: %w", err)
+		}
+		return "", false, nil
+	}
+
+	name := filepath.Base(filepath.FromSlash(first.Name))
+	if name == "." || name == string(filepath.Separator) {
+		name = "restored_file"
+		if matches := backupFilenamePattern.FindStringSubmatch(filepath.Base(backupPath)); len(matches) == 4 {
+			name = matches[1]
+		}
+	}
+
+	return name, true, nil
+}
+
+// extractSingleFile writes the only file of a single-file backup to targetPath
+func extractSingleFile(backupPath, targetPath string) error {
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return fmt.Errorf("cannot open backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return fmt.Errorf("cannot read gzip: %w", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+
+	header, err := tarReader.Next()
+	if err != nil {
+		return fmt.Errorf("error reading tar: %w", err)
+	}
+
+	if err := writeFile(targetPath, true, header, tarReader); err != nil {
+		return err
+	}
+	return verifyGzipTail(gzipReader)
 }
 
 // inspectBackup opens a tar.gz file and scans headers to detect
@@ -135,7 +230,7 @@ func extractFiles(backupPath, destPath string, rootDir string, singleRoot bool) 
 		}
 	}
 
-	return nil
+	return verifyGzipTail(gzipReader)
 }
 
 // extractFilesWithCallback extracts a tar.gz and calls progressCallback per file
@@ -194,7 +289,7 @@ func extractFilesWithCallback(backupPath, destPath string, rootDir string, singl
 		}
 	}
 
-	return nil
+	return verifyGzipTail(gzipReader)
 }
 
 // writeFile creates a file or directory from a tar header

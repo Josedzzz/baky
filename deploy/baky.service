@@ -1,0 +1,19 @@
+[Unit]
+Description=baky - automatic backup of files and configurations
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# User that runs the daemon. It must be the same one the TUI uses, so
+# that both read the same configuration file (~/.config/baky/config.json),
+# and it must be able to read the watched folders.
+User=CHANGE_USER
+ExecStart=/usr/local/bin/baky daemon
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -17,22 +17,22 @@ var backupFilenamePattern = regexp.MustCompile(`^(.+?)_(\d{8})_(\d{6})\.tar\.gz$
 // organized by source path
 func ScanBackups(nasPath string) (map[string]*BackupList, error) {
 	if nasPath == "" {
-		return nil, fmt.Errorf("NAS path not configured")
+		return nil, fmt.Errorf("the backup destination is not configured")
 	}
 
 	// Check if NAS path exists
 	info, err := os.Stat(nasPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot access NAS path: %w", err)
+		return nil, fmt.Errorf("cannot access the backup destination: %w", err)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("NAS path is not a directory: %s", nasPath)
+		return nil, fmt.Errorf("the backup destination is not a folder: %s", nasPath)
 	}
 
 	// Read all files in NAS directory
 	entries, err := os.ReadDir(nasPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read NAS directory: %w", err)
+		return nil, fmt.Errorf("cannot read the backup destination: %w", err)
 	}
 
 	backupsBySource := make(map[string]*BackupList)
@@ -110,10 +110,6 @@ func GetAllBackupsEnhanced(nasPath string, configPaths []ConfigPath, historyEven
 	pathMap := make(map[string]string)
 	for _, configPath := range configPaths {
 		basename := filepath.Base(configPath.Path)
-		if _, exists := pathMap[basename]; exists {
-			fmt.Printf("Warning: Duplicate basename '%s' for paths '%s' and '%s'. Backup resolution may be ambiguous.\n",
-				basename, pathMap[basename], configPath.Path)
-		}
 		pathMap[basename] = configPath.Path
 	}
 
@@ -161,7 +157,8 @@ func parseBackupFilename(filename, nasPath string) (*BackupInfo, error) {
 	timeStr := matches[3]
 
 	// Parse timestamp
-	timestamp, err := time.Parse("20060102 150405", dateStr+" "+timeStr)
+	// Filenames are written in local time, so they must be read back the same way
+	timestamp, err := time.ParseInLocation("20060102 150405", dateStr+" "+timeStr, time.Local)
 	if err != nil {
 		return nil, fmt.Errorf("invalid timestamp in filename: %s", filename)
 	}

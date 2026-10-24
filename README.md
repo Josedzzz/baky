@@ -1,337 +1,339 @@
 # baky
 
-A terminal-based backup utility designed for sysadmins and developers to quickly manage and automate backups of local files and directories to a NAS. Built with Go and the Bubble Tea TUI framework, it provides a fast, keyboard-driven interface for server maintenance.
+Terminal tool for backing up the infrastructure of the GRID Research Group from a single place:
 
-## About
+- **File backup**: compresses files and folders into `tar.gz` archives sent to a backup destination (for example a NAS), manually, on a schedule or when changes are detected, and restores them.
+- **Config backup**: watches configuration folders (Firewall, VPN, DNS...) and records every change as a commit in a Git repository, with history and a line-by-line `diff`.
 
-**baky** simplifies the backup workflow by providing an intuitive terminal user interface (TUI) to:
+It is written in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea). It is a single program with two modes: a terminal interface (TUI) for the administrator and a background service that runs the automatic backups.
 
-- Manage which files and directories to backup
-- Automate backup scheduling with configurable frequencies
-- Browse and restore from existing backups
-- Handle file conflicts during restoration with intelligent strategies
-- Track backup history and restore operations
+Project developed as part of the **MAGITI** degree project: *Modelo de Automatización para la Gestión de la Infraestructura de TI del Grupo de Investigación GRID* (Automation Model for the IT Infrastructure Management of the GRID Research Group).
 
-The project prioritizes **speed**, **simplicity**, and **reliability** for system administrators who work in terminal environments.
+## Origin
 
-## Features
+baky unifies three tools that used to be installed and maintained separately:
 
-### Phase 1: Backup Management (Complete)
+| Original tool | What it did | Where it ended up in baky |
+|---|---|---|
+| `baky` | File backup to `tar.gz` and restore | `internal/backup`, `internal/restore` |
+| [`magiti-config-backup`](https://github.com/MiguelFVasquez/magiti-config-backup) | Bash daemon that versioned configurations in Git | `internal/gitbackup`, rewritten in Go |
+| [`magiti-backup-tui`](https://github.com/MiguelFVasquez/magiti-backup-tui) | TUI to control that daemon | *Config backup* and *Service* menus |
 
-- **Manage Backup Paths**: Add, edit, delete, and configure directories/files to backup
-- **Configurable Schedules**: Set backup frequency per path (daily, weekly, on-change)
-- **Automatic Backups**: Background watcher monitors files for changes and triggers backups
-- **Backup History**: Track all backup operations with timestamps and status (success/error)
-- **NAS Integration**: Configure backup destination on network storage
+The administrator now installs a single binary, a single service and edits a single configuration file.
 
-### Phase 2: Restore Functionality (Complete)
+## Usage
 
-- **Browse Backups**: View all available backups with metadata (timestamp, size, source)
-- **Restore Operations**: Extract backups to original or custom locations
-- **Conflict Resolution**: Three strategies for handling existing files:
-  - **Overwrite**: Replace existing files with backup content
-  - **Rename**: Backup existing files with timestamp and restore new content
-  - **Skip**: Preserve existing files and abort restore
-- **Restore Tracking**: Log all restore operations with details and actions taken
-- **Path Validation**: Ensure restore paths are absolute and parent directories exist
-
-### Phase 3: Version Comparison (Planned)
-
-- Compare file-level differences between backup versions (git-style diffs)
-- View added, modified, and deleted files between versions
-- Preview changes before restoring specific versions
-
-## Quick Start
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/Josedzzz/baky.git
-cd baky
-
-# Build the project
-go build -o baky ./cmd
-
-# Run the application
-./baky
+```
+baky                               Opens the terminal interface
+baky daemon                        Runs the automatic backups (used by systemd)
+baky import-magiti <config.json>   Imports the watched folders of the magiti-config-backup daemon
+baky help                          Shows the help
 ```
 
-### Configuration
+### Interface menus
 
-**baky** uses a single configuration file at `~/.config/baky/config.json` (Linux standard across all platforms).
+```
+BAKY
+  File backup     Manage paths · Back up now · View backups / Restore · Backup destination
+  Config backup   Watched folders · Change history · Repository
+  Service         Service status · Live logs
+  Help
+  Quit
+```
 
-The config file stores:
+Common keys: `↑/↓` or `k/j` to navigate, `enter` to select, `esc` to go back, `?` for help and `q` to quit.
 
-- Backup destination (NAS path)
-- Monitored backup paths with schedules
-- Backup history (last 100 events)
-- Restore history (last 100 events)
+The automatic backups are run by the service, not by the interface: you can close the TUI without interrupting them. Changes made from the TUI (adding a path, watching a new folder) are applied by the service by itself, without restarting it.
 
-### Basic Usage
+## Quick install
 
-1. **Start the app**: Run `./baky`
-2. **Main Menu**: Navigate with arrow keys or vim keys (hjkl)
+```bash
+git clone https://github.com/Josedzzz/baky.git
+cd baky
+go build -o baky ./cmd
+sudo install -m 0755 baky /usr/local/bin/baky
+```
 
-   - `↑/↓` or `k/j`: Navigate menu items
-   - `Enter`: Select option
-   - `q`: Quit
+Requirements: Go 1.24 or later to build, `git` for the config backup and `systemd` for the service.
 
-3. **Manage Backup Paths**: Add directories to backup
+The full installation (service, permissions and config repository) is in [docs/installation.md](docs/installation.md).
 
-   - `a`: Add new path
-   - `e`: Edit selected path
-   - `f`: Cycle backup frequency (Daily → Weekly → On-Change)
-   - `d`: Delete path
+## How it works
 
-4. **View Backups**: Browse and restore existing backups
+### File backup
 
-   - `↑/↓` or `k/j`: Scroll through backups
-   - `PgUp/PgDn`: Scroll faster
-   - `Enter`: Select backup to restore
-   - `o`: Restore to original location
-   - `c`: Restore to custom path
+Each configured path has a frequency:
 
-5. **Conflict Resolution**: Handle files at restore destination
-   - `↑/↓`: Select action (Overwrite, Rename, or Skip)
-   - `Enter`: Confirm and start restore
+| Frequency | When it is backed up |
+|---|---|
+| Daily | Every day, during the 3 AM hour |
+| Weekly | On Sundays, during the 3 AM hour |
+| On change | A few seconds after a file in the path changes |
 
-### Configuration File Example
+Backups are stored at the destination as `[name]_YYYYMMDD_HHMMSS.tar.gz`. When restoring you can choose the original location or another path, and what to do if there are files already:
+
+- **Overwrite**: replaces the files that are in the backup and keeps the rest.
+- **Rename**: keeps what exists under a name with the date and restores the backup.
+- **Skip**: does not restore if there are files already.
+
+Before restoring, baky shows what would change at the chosen destination:
+
+```
+RESTORE CHANGES
+M modified: 1   + created: 1   = unchanged: 1
+
+M report.txt  (modified)
++ deleted.txt  (created)
+= same.txt  (unchanged)
+```
+
+With `enter` on a file you see its line-by-line differences against the current file (in red what is removed, in green what comes back), and `r` continues with the restore. This preview changes nothing. The line-by-line comparison uses `git`, and only applies to text files.
+
+The backup is always extracted to a temporary folder first: a damaged backup never changes what already exists at the destination.
+
+### Config backup
+
+Each watched folder is mapped to a folder inside the config repository (for example `/etc/openvpn` → `vpn`). When a file changes, the service copies it to the repository, creates one commit per file and pushes it to the remote:
+
+```
+auto-backup: updated nat.conf (2026-07-24 21:46:14)
+auto-backup: deleted config-test.conf (2026-07-24 21:39:09)
+```
+
+In addition:
+
+- On startup it syncs everything: changes made while the service was stopped are not lost.
+- It ignores editor temporary files (`*.swp`, `*~`, `4913`).
+- If the push to the remote fails, the commits stay in the local repository and the push is retried.
+- If a watched folder stops being accessible, what was already backed up is kept.
+
+#### Validating every change
+
+Each watched folder can have two optional commands, set with `c` in *Watched folders*. `{dir}` is replaced by the folder that holds the configuration:
+
+| Command | Example with Shorewall | When it runs |
+|---|---|---|
+| Validation | `sudo -n shorewall check {dir}` | After every detected change, and before a restore |
+| Apply | `sudo -n shorewall try {dir}` | Only when a file is restored from the history |
+
+When a change does not pass validation, baky still backs it up (the backup reflects what is on disk), but marks it: the commit ends with `[validation failed]`, stores the validator's error, shows up in red in the history and leaves a warning in the log. This way a syntax error is known a few seconds after it is saved, before anyone restarts the service.
+
+baky never applies a change it detects on its own: it only validates it.
+
+The commands run exactly as written, without a shell. If they need privileges they must start with `sudo -n`, and the service user must have that permission without a password (see [docs/installation.md](docs/installation.md)).
+
+#### Restoring an earlier configuration
+
+In *Config backup → Change history* each line is a backed-up change. When you pick one with `enter`, baky compares the current file with the version saved in that change and shows what restoring it would do:
+
+```
+── Changes from line 1 of the current file ──
+  -A INPUT -p tcp --dport 22 -j ACCEPT
+- -A INPUT -p tcp --dport 8080 -j ACCEPT      current line that is removed
++ -A INPUT -p tcp --dport 80 -j ACCEPT        line that comes back
+  -A INPUT -p tcp --dport 443 -j ACCEPT
+```
+
+`r` restores that version, after confirmation. If the folder has validation and apply commands, the restore does not touch the real configuration until it knows it is good:
+
+1. It copies the folder to a temporary directory and puts the version to restore there.
+2. It runs the validation on that copy. If it fails, it stops.
+3. It runs the apply command on that copy. If it fails, it stops.
+4. Only then does it write the file to the watched folder, keeping its owner and permissions. If the user cannot write there, it writes the file through `sudo` with the `baky-install` helper, which only writes inside the folders listed in `/etc/baky/restore-dirs`.
+
+The service detects the restore and records it as one more change, so it can also be undone. If the chosen change deleted the file, it holds no version to restore: pick an earlier one.
+
+The config repository is a dedicated repository, separate from the code. At GRID it is [`grid-config-data`](https://github.com/MiguelFVasquez/grid-config-data).
+
+Commits made before the messages were translated to English (`auto-backup: actualizado ...`, `[validación fallida]`) still show up in the history, and invalid ones are still marked.
+
+## Files
+
+They all live in `~/.config/baky/` of the user that runs baky. The `BAKY_CONFIG` variable lets you use another location for `config.json`; the other files go next to it.
+
+| File | Contents |
+|---|---|
+| `config.json` | Settings: destination, paths, repository and watched folders |
+| `state.json` | Backup and restore history, last backup of each path |
+| `baky.log` | Activity log of the service |
+
+Example `config.json`:
 
 ```json
 {
   "nas_path": "/mnt/nas/backups",
   "backup_paths": [
-    {
-      "path": "/home/user/documents",
-      "frequency": "daily",
-      "last_backup": "2026-04-14T11:07:48Z"
-    },
-    {
-      "path": "/etc/nginx/nginx.conf",
-      "frequency": "on_change",
-      "last_backup": "2026-04-13T10:13:31Z"
-    }
+    { "path": "/home/grid/documents", "frequency": "daily" },
+    { "path": "/etc/nginx/nginx.conf", "frequency": "on_change" }
   ],
-  "history": [
-    {
-      "path": "/home/user/documents",
-      "timestamp": "2026-04-14T11:07:48Z",
-      "result": "success"
-    }
-  ],
-  "restore_history": [
-    {
-      "backup_filename": "documents_20260414_110748.tar.gz",
-      "source_path": "/home/user/documents",
-      "restore_path": "/home/user/documents",
-      "timestamp": "2026-04-19T23:55:40Z",
-      "result": "success",
-      "action": "rename"
-    }
-  ]
+  "config_backup": {
+    "repo_dir": "/home/grid/grid-config-data",
+    "branch": "main",
+    "watches": [
+      { "source": "/etc/openvpn", "dest": "vpn" },
+      {
+        "source": "/etc/shorewall",
+        "dest": "firewall",
+        "check": "sudo -n shorewall check {dir}",
+        "apply": "sudo -n shorewall try {dir}"
+      }
+    ]
+  }
 }
 ```
 
-## Architecture
+You don't need to edit it by hand: everything is configured from the interface.
 
-### Backup Format
-
-Backups are stored as compressed tar archives in the NAS directory:
-
-- **Filename**: `[source_basename]_YYYYMMdd_HHmmss.tar.gz`
-- **Example**: `nginx.conf_20260414_110748.tar.gz`
-- **Contents**: Complete directory structure preserved in tar format
-
-### Restore Process
-
-1. **Path Resolution**: Match backup to original source path using config
-2. **Conflict Detection**: Check if files exist at restore destination
-3. **Conflict Handling**: Apply selected action (overwrite/rename/skip)
-4. **Extraction**: Extract backup with intelligent directory detection
-5. **Logging**: Record restore event with action and result
-
-### Data Storage
-
-```
-~/.config/baky/config.json          # Configuration file
-/mnt/nas/backups/                   # Backup destination (configurable)
-  ├── documents_20260414_110748.tar.gz
-  ├── nginx.conf_20260413_101331.tar.gz
-  └── ...
-```
-
-## Tech Stack
-
-- **Language**: Go 1.24+
-- **TUI Framework**: [Bubble Tea](https://github.com/charmbracelet/bubbletea)
-- **UI Components**: [Bubbles](https://github.com/charmbracelet/bubbles)
-- **Styling**: [Lip Gloss](https://github.com/charmbracelet/lipgloss)
-
-## Project Structure
+## Project structure
 
 ```
 baky/
-├── cmd/
-│   └── main.go                 # Application entry point
+├── cmd/main.go            Entry point: TUI, daemon and import
 ├── internal/
-│   ├── backup/                 # Backup logic & watcher
-│   │   ├── backup.go           # Backup creation
-│   │   └── watcher.go          # File change detection
-│   ├── config/                 # Configuration management
-│   │   └── config.go           # Config loading/saving
-│   ├── restore/                # Restore functionality
-│   │   ├── types.go            # Data structures
-│   │   ├── scanner.go          # Backup scanning
-│   │   ├── extractor.go        # Tar extraction
-│   │   ├── restorer.go         # Restore operations
-│   │   └── list.go             # Backup filtering
-│   └── tui/                    # Terminal UI
-│       ├── model.go            # TUI state model
-│       ├── view.go             # TUI rendering
-│       └── styles.go           # UI styling
-├── go.mod & go.sum             # Go module files
-└── README.md                   # This file
+│   ├── backup/            File backup (tar.gz) and its scheduling
+│   ├── restore/           Listing, comparing and restoring backups
+│   ├── gitbackup/         Versioned config backup in Git
+│   ├── daemon/            Service: runs both engines and reloads the configuration
+│   ├── service/           Control of the systemd service
+│   ├── config/            Configuration and state shared by the TUI and the service
+│   ├── logging/           Writing and reading the service log
+│   ├── watch/             Recursive folder watching (fsnotify)
+│   ├── textdiff/          Line-by-line comparison of two versions of a file
+│   └── tui/               Terminal interface, one file per screen
+├── deploy/                systemd unit, sudoers rule and the baky-install helper
+└── docs/                  Installation and test logs
 ```
 
-## Development
+The code, the interface and the documentation are all in English.
 
-### Building
+## Testing
+
+### Automated tests
+
+```bash
+go test ./...          # all tests
+go test -race ./...    # also detects race conditions
+go vet ./...           # static analysis
+```
+
+They do not use the network or touch the real configuration: each test works in temporary folders, and the config backup is tested against a local Git repository that acts as the remote.
+
+| Package | What its tests cover |
+|---|---|
+| `internal/backup` | Creating the `tar.gz` (folders, single file, symlinks) and when a scheduled backup is due |
+| `internal/restore` | Restore with overwrite, rename and skip; damaged backup; single file; preview of the changes |
+| `internal/gitbackup` | Creating, modifying, deleting and renaming files; subfolders; moved folders; temporary files; push failure and retry; validating every change; comparing and restoring an earlier version with prior validation |
+| `internal/daemon` | The whole service with both engines and a live configuration change |
+| `internal/config` | Saving, history in `state.json`, migrating old configurations, damaged file, watched folders |
+| `internal/tui` | Navigating the menus and the main flows, by sending keys to the model |
+| `internal/logging`, `internal/watch`, `internal/textdiff` | Log format and reading; recursive watching; line-by-line comparison |
+
+### Manual testing without installing anything
+
+You can test everything in a temporary folder, without systemd, without `sudo` and without touching `~/.config/baky`. The `BAKY_CONFIG` variable makes baky use a separate configuration.
+
+**1. Prepare the test environment**
 
 ```bash
 go build -o baky ./cmd
+
+export TEST=/tmp/baky-test
+export BAKY_CONFIG=$TEST/cfg/config.json
+mkdir -p $TEST/cfg $TEST/etc/firewall $TEST/docs $TEST/nas
+
+# A local "remote" repository and its clone, which acts as the config repository
+git init --bare --initial-branch=main $TEST/remote.git
+git init --initial-branch=main $TEST/repo
+git -C $TEST/repo remote add origin $TEST/remote.git
+
+echo "rule 1" > $TEST/etc/firewall/rules.conf
+echo "hello" > $TEST/docs/report.txt
 ```
 
-### Running Tests
+**2. Start the service in a terminal**
 
 ```bash
-go test ./...
+./baky daemon
 ```
 
-## Roadmap
+It stays in the foreground showing the log. Stop it with `Ctrl+C`.
 
-### Phase 1-2: Core Features (Completed)
+**3. Open the interface in another terminal**
 
-- Backup path management with add/edit/delete
-- Automatic backup scheduling (daily, weekly, on-change)
-- File watcher for on-change backups
-- View backups in TUI with scrollable list
-- Restore to original or custom location
-- Restore with conflict resolution (overwrite, rename, skip)
-- Restore history tracking
-- Backup history with filtering and sorting
+```bash
+export TEST=/tmp/baky-test
+export BAKY_CONFIG=$TEST/cfg/config.json
+./baky
+```
 
-### Phase 3: Version Comparison (High Priority)
+The main menu will show the service as inactive: that is expected, because in this test the daemon is not running under systemd. For the same reason, the start and stop keys of *Service → Service status* do not apply here.
 
-- [ ] **Backup Diff Viewer** — Compare two backup versions and show added, modified, and deleted files, similar to `git diff --stat`
-- [ ] **File Content Diff** — Show line-by-line differences for text files between two backup versions
-- [ ] **Change Preview** — Preview what files would change before restoring a specific backup version
-- [ ] **Restore Selectively from Diff** — Select individual files from the diff view to restore, rather than restoring the entire backup
+**4. Test the config backup**
 
-### Phase 4: GitHub Integration (High Priority)
+1. *Config backup → Repository*: `e`, type `/tmp/baky-test/repo`, `enter`.
+2. *Config backup → Watched folders*: `a`, type `/tmp/baky-test/etc/firewall`, `enter`, accept the name `firewall` with `enter`.
+3. In a third terminal, modify, create and delete files:
 
-- [ ] **GitHub as Backup Destination** — Add support for pushing backups to GitHub Releases or repository storage
-- [ ] **GitHub Auth** — Token-based authentication (env var, config file, or interactive prompt)
-- [ ] **Release Management** — Automatically create GitHub releases for backup snapshots
-- [ ] **Backup Sync** — Sync local backups to GitHub with progress indication
-- [ ] **Restore from GitHub** — Browse and restore backups stored in GitHub releases
-- [ ] **Cross-platform** — Works with GitHub CLI (`gh`) or direct API calls
+   ```bash
+   echo "rule 2" >> /tmp/baky-test/etc/firewall/rules.conf
+   mkdir /tmp/baky-test/etc/firewall/extra
+   echo "nat" > /tmp/baky-test/etc/firewall/extra/nat.conf
+   rm /tmp/baky-test/etc/firewall/rules.conf
+   ```
 
-### Phase 5: Backup Quality & Reliability
+4. Expected result, a few seconds after each change:
+   - In *Change history* (`r` to refresh): one commit per file, `auto-backup: updated ...` or `auto-backup: deleted ...`.
+   - In *Change history*, `enter` on an earlier change shows the differences with the current file, and `r` restores it.
+   - In *Service → Live logs*: `Commit created` and `Push succeeded`.
+   - In the remote: `git -C /tmp/baky-test/remote.git log --oneline main` shows the same commits.
 
-- [ ] **Backup Integrity Verification** — Verify tar.gz integrity after creation (checksum, test extraction)
-- [ ] **Backup Encryption** — Optional AES encryption for backups at rest (encrypt before storing to NAS)
-- [ ] **Compression Level Options** — Let users choose gzip compression level (fast, balanced, best)
-- [ ] **Backup Retention Policies** — Auto-delete old backups based on rules (keep last N, keep by age, etc.)
-- [ ] **Backup Dry-run Mode** — Simulate a backup to show what files would be included
-- [ ] **Exclude Patterns** — `.gitignore`-style glob patterns to exclude certain files/directories from backups
+To test the sync on startup: stop the daemon with `Ctrl+C`, change a file in the watched folder and start it again. The change must be backed up on startup.
 
-### Phase 6: Restore Enhancements
+**5. Test the file backup**
 
-- [ ] **Selective File Restore** — Browse contents of a backup archive and choose individual files to restore instead of the entire backup
-- [ ] **Restore Dry-run** — Preview what files would be restored, where they would go, and what conflicts would arise, without making any changes
-- [ ] **Restore Progress Bar** — Show real-time progress during extraction (files extracted / total files, bytes processed)
-- [ ] **Batch Restore** — Select multiple backups at once and restore them in sequence
-- [ ] **Restore to Temporary Directory** — Extract to a temp directory and let the user review before confirming the final location
+1. *File backup → Backup destination*: `e`, type `/tmp/baky-test/nas`, `enter`; `t` should say it is accessible.
+2. *File backup → Manage paths*: `a`, type `/tmp/baky-test/docs`, `enter`.
+3. *File backup → Back up now*: `enter`. A `docs_YYYYMMDD_HHMMSS.tar.gz` should appear in `/tmp/baky-test/nas`.
+4. *View backups / Restore*: `enter` on the backup, `c`, type `/tmp/baky-test/restored`, `enter`. The list of restore changes appears (here, `report.txt` is created); `r` to continue and `enter` to confirm. The file `report.txt` should appear in that folder.
+5. Preview with differences: modify the original file (`echo "another line" >> /tmp/baky-test/docs/report.txt`), go back to *View backups / Restore*, `enter` on the backup and `o` (original location). The file shows up as "modified"; `enter` shows the line that would be removed.
+6. On-change backup: in *Manage paths* press `f` until you see `[on change]`, then modify a file:
 
-### Phase 7: Storage & Destinations
+   ```bash
+   echo "change" >> /tmp/baky-test/docs/report.txt
+   ```
 
-- [ ] **Multi-destination Support** — Backup to multiple destinations simultaneously (NAS + GitHub + S3)
-- [ ] **S3-Compatible Storage** — Support for AWS S3, MinIO, DigitalOcean Spaces, etc.
-- [ ] **SFTP/SCP Remote** — Backup directly to remote servers via SSH
-- [ ] **Local Directory** — Simple local directory as backup destination
-- [ ] **Destination Health Checks** — Test connectivity and write permissions to all configured destinations
+   About 5 seconds later the daemon creates a new `tar.gz`, and the log shows `On-change backup started` and `Backup completed`.
 
-### Phase 8: Scheduling & Automation
+**6. Clean up**
 
-- [ ] **TUI Scheduling UI** — Visual date/time picker for backup schedules instead of fixed frequency presets
-- [ ] **Custom Cron Expressions** — Full cron expression support for advanced scheduling
-- [ ] **Run on System Events** — Trigger backups on system events (login, network mount, USB plug)
-- [ ] **Quiet / Headless Mode** — Run backups from cron or systemd timers with logging only, no TUI
-- [ ] **Desktop Notifications** — Desktop notification on backup success/failure
+```bash
+rm -rf /tmp/baky-test
+unset TEST BAKY_CONFIG
+```
 
-### Phase 9: User Experience
+Testing on a real installation (systemd service and remote repository) is in step 7 of [docs/installation.md](docs/installation.md).
 
-- [ ] **Search Backups** — Search through backup filenames, source paths, and timestamps
-- [ ] **Backup Statistics Dashboard** — Summary view with total backups, size, success rate, etc.
-- [ ] **Inline Log Viewer** — View backup/restore logs directly in the TUI with filtering
-- [ ] **Configuration Profiles** — Multiple named profiles for different backup scenarios (work, home, server)
-- [ ] **Configuration Import/Export** — Share configs between machines via JSON export/import
-- [ ] **Backup Size Analysis** — Visual breakdown of which paths consume the most backup storage
-- [ ] **Color Themes** — Light/dark mode toggle and custom color schemes
-- [ ] **Help System** — In-app help with keybindings and feature explanations
+## To do
 
-### Phase 10: Advanced Features
+- Backup retention policy (delete the oldest ones automatically).
+- Encryption of the backups and of the config repository.
+- Alerts when the service fails.
+- Comparing backup versions from the interface (`internal/restore/diff.go` already computes the differences).
+- Consistent backup of running virtual machines.
 
-- [ ] **Incremental Backups** — Only backup files that changed since last full backup (significant space savings)
-- [ ] **Backup Diff Since Last Backup** — Show what files changed between the current state and the last backup
-- [ ] **Pre/Post Backup Hooks** — Run custom scripts before and after backups (e.g., stop a service, dump a DB)
-- [ ] **Backup Annotations** — Add custom labels or notes to backups for easier identification
-- [ ] **Bandwidth Limiting** — Throttle upload speed for remote backups
-- [ ] **Email/Webhook Notifications** — Send backup reports via email or webhook
-- [ ] **Snapshot Comparison Over Time** — Graph showing backup sizes and counts over time
+## Documentation
 
-## Configuration
+- [Installation and setup](docs/installation.md)
+- [Config daemon test log](docs/daemon-tests.md)
+- [TUI test log](docs/tui-tests.md)
 
-### Linux Standard
+## Authors
 
-**baky** uses the Linux standard configuration directory (`~/.config/baky/config.json`) across all platforms for consistency and follows XDG Base Directory specification.
+- Jose D. Amaya — MAGITI Project Researcher
+- Juan M. Florez — MAGITI Project Researcher
 
-### Backup Naming
-
-Backup filenames follow a consistent pattern to enable parsing and sorting:
-
-- Format: `[source_name]_YYYYMMdd_HHmmss.tar.gz`
-- Sortable: Oldest to newest alphabetically
-- Unique: Timestamp ensures no collisions
-
-## Troubleshooting
-
-### Backup destination not accessible
-
-- Ensure NAS path exists and is writable
-- Check network connectivity to NAS
-- Verify permissions: `chmod 755 /mnt/nas/backups`
-
-### Restore fails with "parent directory does not exist"
-
-- Create the parent directory before restoring to a custom path
-- Ensure the path is absolute (starts with `/`)
-
-### No backups found
-
-- Verify NAS path is configured correctly
-- Check that backup files exist in the NAS directory
-- Ensure backup files follow the naming convention
-
-## Contributing
-
-This project is in active development. Feel free to submit issues and enhancement requests!
+Based on an interview with Luis E. Sepúlveda, GRID Systems Administrator (June 22, 2026).
 
 ## License
 
-MIT License — feel free to use this project however you like!
-
-## Support
-
-For bugs, questions, or feature requests, please open an issue on GitHub.
+MIT. See [LICENSE](LICENSE).

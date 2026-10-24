@@ -1,0 +1,9 @@
+# Lets the TUI user start, stop and restart the baky service without a
+# password. Checking the status does not need sudo.
+#
+# Install with:
+#   sudo install -m 0440 deploy/baky.sudoers /etc/sudoers.d/baky
+#   sudo visudo -cf /etc/sudoers.d/baky
+#
+# Replace CHANGE_USER with the user that runs the TUI.
+CHANGE_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start baky.service, /usr/bin/systemctl stop baky.service, /usr/bin/systemctl restart baky.service

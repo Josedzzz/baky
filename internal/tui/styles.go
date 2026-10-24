@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 var (
 	// Colors
@@ -8,6 +12,9 @@ var (
 	secondaryColor = lipgloss.Color("#415A77")
 	whiteColor     = lipgloss.Color("#FFFFFF")
 	grayColor      = lipgloss.Color("#A0A0A0")
+	okColor        = lipgloss.Color("#00FF87")
+	warnColor      = lipgloss.Color("#FFD866")
+	errorColor     = lipgloss.Color("#FF5F5F")
 
 	// Styles
 	titleStyle = lipgloss.NewStyle().
@@ -67,8 +74,20 @@ var (
 			MarginTop(1)
 
 	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF0000")).
+			Foreground(errorColor).
 			Bold(true)
+
+	// Service state styles
+	activeStyle = lipgloss.NewStyle().
+			Foreground(okColor).
+			Bold(true)
+
+	inactiveStyle = lipgloss.NewStyle().
+			Foreground(errorColor).
+			Bold(true)
+
+	mutedStyle = lipgloss.NewStyle().
+			Foreground(grayColor)
 
 	// Log Card Styles
 	logCardStyle = lipgloss.NewStyle().
@@ -79,9 +98,30 @@ var (
 			BorderForeground(secondaryColor)
 
 	logErrorCard = logCardStyle.
-			BorderForeground(lipgloss.Color("#FF0000"))
+			BorderForeground(errorColor)
 
 	logTimeStyle = lipgloss.NewStyle().
 			Foreground(grayColor).
 			Italic(true)
+
+	// Diff styles: what a restore would remove from and bring back to a file
+	diffRemovedStyle = lipgloss.NewStyle().Foreground(errorColor)
+	diffAddedStyle   = lipgloss.NewStyle().Foreground(okColor)
+	diffHunkStyle    = lipgloss.NewStyle().Foreground(primaryColor).Bold(true)
+
+	// Daemon log line styles, by level
+	logWarnStyle  = lipgloss.NewStyle().Foreground(warnColor)
+	logErrorStyle = lipgloss.NewStyle().Foreground(errorColor)
 )
+
+// styleLogLine colors a line of the daemon log according to its level
+func styleLogLine(line string) string {
+	switch {
+	case strings.Contains(line, "[ERROR]"):
+		return logErrorStyle.Render(line)
+	case strings.Contains(line, "[WARN]"):
+		return logWarnStyle.Render(line)
+	default:
+		return line
+	}
+}
