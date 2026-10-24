@@ -160,12 +160,12 @@ func (m Model) renderServiceStatus(body *strings.Builder) {
 	case !m.serviceKnown || m.serviceLoading:
 		body.WriteString(headerStyle.Render("Status:  ") + processingStyle.Render("checking...") + "\n")
 	case m.service.Err != nil:
-		body.WriteString(headerStyle.Render("Status:  ") + inactiveStyle.Render("● UNKNOWN") + "\n\n")
+		body.WriteString(headerStyle.Render("Status:  ") + inactiveStyle.Render("UNKNOWN") + "\n\n")
 		body.WriteString(errorStyle.Render(m.service.Err.Error()) + "\n")
 	case m.service.Active:
-		body.WriteString(headerStyle.Render("Status:  ") + activeStyle.Render("● ACTIVE") + "\n")
+		body.WriteString(headerStyle.Render("Status:  ") + activeStyle.Render("ACTIVE") + "\n")
 	default:
-		body.WriteString(headerStyle.Render("Status:  ") + inactiveStyle.Render("● INACTIVE") + mutedStyle.Render(" ("+m.service.Status+")") + "\n")
+		body.WriteString(headerStyle.Render("Status:  ") + inactiveStyle.Render("INACTIVE") + mutedStyle.Render(" ("+m.service.Status+")") + "\n")
 	}
 
 	if m.serviceKnown && m.service.Detail != "" {

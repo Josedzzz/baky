@@ -31,7 +31,7 @@ Validate that the automatic backup daemon meets the requirements identified in t
   echo "regla de prueba $(date)" >> ~/simulacion-configs/firewall/reglas.conf
   ```
 - **Expected result:** the daemon detects the `close_write` event, copies the file to the repository, runs `git commit` and `git push`.
-- **Actual result:** ✅ Passed. Log:
+- **Actual result:** Passed. Log:
   ```
   [INFO] Cambio detectado: /home/miguel/simulacion-configs/firewall/reglas.conf
   [INFO] Commit realizado para firewall/reglas.conf.
@@ -44,11 +44,11 @@ Validate that the automatic backup daemon meets the requirements identified in t
 - **What was tested:** whether the daemon survives closing the terminal or session where it was started.
 - **Procedure:** the daemon was started manually in a terminal, then that terminal/session was closed.
 - **Expected result (before the fix):** the daemon should keep running.
-- **Actual result:** ❌ Failed. Checking with `ps -ef`, the process no longer existed. The daemon depended on the terminal session where it was launched.
+- **Actual result:** Failed. Checking with `ps -ef`, the process no longer existed. The daemon depended on the terminal session where it was launched.
 - **Root cause:** the script ran directly in the foreground, without a process manager to keep it alive independently of the user's session.
 - **Fix applied:** a `systemd` service (`magiti-backup.service`) was implemented with `Restart=on-failure`, running as a system user, with automatic start (`enable`).
 - **Retest:** `wsl --shutdown` was run (equivalent to a full system restart) and the service status was checked after restarting.
-- **Result after the fix:** ✅ Passed.
+- **Result after the fix:** Passed.
   ```
   Active: active (running) since Fri 2026-07-24 20:57:07 -05; 3min 36s ago
   ```
@@ -63,7 +63,7 @@ Validate that the automatic backup daemon meets the requirements identified in t
   jq -r '.carpetas | to_entries[] | "\(.key)=\(.value)"' scripts/config.json
   ```
 - **Expected result:** the JSON is parsed correctly and the daemon starts using those values.
-- **Actual result:** ✅ Passed.
+- **Actual result:** Passed.
   ```
   firewall=firewall
   vpn=vpn
@@ -79,7 +79,7 @@ Validate that the automatic backup daemon meets the requirements identified in t
   rm ~/simulacion-configs/vpn/config-test.conf
   ```
 - **Expected result:** the daemon detects the `DELETE` event, removes the corresponding file in the repo and commits the deletion.
-- **Actual result:** ✅ Passed.
+- **Actual result:** Passed.
   ```
   [INFO] Evento detectado: DELETE en /home/miguel/simulacion-configs/vpn/config-test.conf
   [INFO] Commit realizado: eliminado config-test.conf -> vpn/config-test.conf.
@@ -95,7 +95,7 @@ Validate that the automatic backup daemon meets the requirements identified in t
   mv ~/simulacion-configs/firewall/temporal.conf ~/simulacion-configs/firewall/renombrado.conf
   ```
 - **Expected result:** two events (`MOVED_FROM` and `MOVED_TO`), resulting in a commit deleting the old file and a commit creating the new one.
-- **Actual result:** ✅ Passed.
+- **Actual result:** Passed.
   ```
   [INFO] Evento detectado: MOVED_FROM en .../firewall/temporal.conf
   [INFO] El archivo eliminado no existía en el repo, nada que hacer: firewall/temporal.conf
@@ -113,7 +113,7 @@ Validate that the automatic backup daemon meets the requirements identified in t
   echo "nat rule" > ~/simulacion-configs/firewall/reglas_extra/nat.conf
   ```
 - **Expected result (first attempt):** the file should be backed up to `firewall/reglas_extra/nat.conf` inside the repo.
-- **Actual result (first attempt):** ❌ Failed silently.
+- **Actual result (first attempt):** Failed silently.
   ```
   [WARN] Evento no manejado explícitamente: CLOSE_WRITE,CLOSE
   ```
@@ -123,7 +123,7 @@ Validate that the automatic backup daemon meets the requirements identified in t
   ```bash
   echo "nat rule v2" > ~/simulacion-configs/firewall/reglas_extra/nat.conf
   ```
-- **Result after the fix:** ✅ Passed.
+- **Result after the fix:** Passed.
   ```
   [INFO] Commit realizado: actualizado nat.conf -> firewall/reglas_extra/nat.conf.
   [INFO] Push exitoso para firewall/reglas_extra/nat.conf.
@@ -141,14 +141,14 @@ Validate that the automatic backup daemon meets the requirements identified in t
 
 | Scenario | Covered |
 |---|---|
-| File creation/modification | ✅ |
-| File deletion | ✅ |
-| File rename/move | ✅ |
-| Nested subfolders | ✅ |
-| Persistence across a system restart | ✅ |
-| External configuration (config.json) | ✅ |
-| Syntax validation before commit | ⏸️ Pending (out of scope for v1) |
-| Encryption at rest of the repository | ⏸️ Pending (out of scope for v1) |
+| File creation/modification | Yes |
+| File deletion | Yes |
+| File rename/move | Yes |
+| Nested subfolders | Yes |
+| Persistence across a system restart | Yes |
+| External configuration (config.json) | Yes |
+| Syntax validation before commit | Pending (out of scope for v1) |
+| Encryption at rest of the repository | Pending (out of scope for v1) |
 
 ## Conclusion
 

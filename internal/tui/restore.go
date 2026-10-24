@@ -254,13 +254,13 @@ func (m Model) renderViewBackups(body *strings.Builder) {
 			}
 
 			// Format the backup info
-			status := "✓"
+			status := "OK"
 			if b.Result != "success" {
-				status = "✗"
+				status = "ERROR"
 			}
 			sizeStr := restore.FormatFileSize(b.FileSize)
 			timeStr := b.Timestamp.Format("2006-01-02 15:04:05")
-			line := fmt.Sprintf("%s %s | %s | %s | %s",
+			line := fmt.Sprintf("%-5s %s | %s | %s | %s",
 				status,
 				timeStr,
 				sizeStr,
@@ -316,9 +316,9 @@ func (m Model) renderSelectRestoreAction(body *strings.Builder) {
 	body.WriteString(headerStyle.Render("If there are already files at the destination, what should we do?") + "\n\n")
 
 	actions := []string{
-		"✓ Overwrite - Replaces the files in the backup; keeps the rest",
-		"↻ Rename    - Keeps what exists under a dated name and restores the backup",
-		"✗ Skip      - Does not restore if there are files already",
+		"Overwrite - Replaces the files in the backup; keeps the rest",
+		"Rename    - Keeps what exists under a dated name and restores the backup",
+		"Skip      - Does not restore if there are files already",
 	}
 
 	for i, action := range actions {

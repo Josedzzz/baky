@@ -25,52 +25,52 @@ Validate that the terminal interface lets the infrastructure administrator check
 
 - **What was tested:** that the TUI correctly reflects whether the `magiti-backup.service` service is active or inactive.
 - **Expected result:** the status shown on screen matches the real result of `systemctl status`.
-- **Actual result (first attempt):** ❌ Failed. The TUI always showed "INACTIVO" (inactive), even with the service running (confirmed manually with `sudo -n systemctl status magiti-backup.service`, which did show `active (running)`).
+- **Actual result (first attempt):** Failed. The TUI always showed "INACTIVO" (inactive), even with the service running (confirmed manually with `sudo -n systemctl status magiti-backup.service`, which did show `active (running)`).
 - **Root cause:** the code ran `sudo -n systemctl is-active magiti-backup.service`, but the file `/etc/sudoers.d/magiti-backup` only allowed the `start`, `stop`, `restart` and `status` subcommands without a password — **`is-active` was not included**. Without authorization, `sudo -n` failed silently and the code interpreted that failure as "service inactive".
 - **Fix applied:** `/usr/bin/systemctl is-active magiti-backup.service` was added to the list of commands allowed without a password in `sudoers`.
 - **Retest:** the status was checked again from the TUI after the fix.
-- **Result after the fix:** ✅ Passed. The TUI correctly showed "● ACTIVO" (active) in green, matching the real state of the service.
+- **Result after the fix:** Passed. The TUI correctly showed "ACTIVO" (active) in green, matching the real state of the service.
 - **Lesson for the project:** every time the code adds a new `systemctl` subcommand, it must be synchronized manually with the `sudoers` file. The complete, final line still needs to be documented in the installation README to avoid this mismatch in future deployments.
 
 ### Test 2 — Service status screen (actions: start / stop / restart)
 
 - **What was tested:** that the actions `i` (iniciar, start), `d` (detener, stop) and `r` (reiniciar, restart) run the corresponding `systemctl` subcommand and show the result on screen.
 - **Procedure:** the three keys were tested from the status screen, checking the confirmation message in the TUI and comparing with `systemctl status` from an external terminal.
-- **Actual result:** ✅ Passed. Each action showed the message "Inicio/Detención/Reinicio ejecutado correctamente" (start/stop/restart completed successfully), and the status refreshed automatically after each action.
+- **Actual result:** Passed. Each action showed the message "Inicio/Detención/Reinicio ejecutado correctamente" (start/stop/restart completed successfully), and the status refreshed automatically after each action.
 
 ### Test 3 — Live logs screen (reading and auto-refresh)
 
 - **What was tested:** that the logs screen shows the last lines of the `backup-daemon.log` file, colored by level (INFO/WARN/ERROR), and that it refreshes automatically without user intervention.
 - **Procedure:** the logs screen was opened and, from another terminal, a real change was made to a watched file (`echo "..." >> ~/simulacion-configs/vpn/config-test.conf`).
 - **Expected result:** the new log line should appear in the TUI within at most 3 seconds (the configured refresh interval), without the user pressing any key.
-- **Actual result (first attempt):** ❌ The logs screen displayed correctly when opened, but it was not possible to leave it by pressing `esc` or `q` — the interface was "frozen" on that view.
+- **Actual result (first attempt):** Failed. The logs screen displayed correctly when opened, but it was not possible to leave it by pressing `esc` or `q` — the interface was "frozen" on that view.
 - **Root cause:** in the model's `Update` function, the `switch` that routes keys (`tea.KeyMsg`) by active view did not include the `vistaLogs` case. The `updateLogs` function already existed and handled `esc`/`q` correctly, but it was never called because the `switch` lacked that branch, so the keys had no effect.
 - **Fix applied:** the missing case (`case vistaLogs: return m.updateLogs(msg)`) was added to the key routing `switch`.
 - **Retest:** opening the logs screen and leaving it with `esc` was repeated.
-- **Result after the fix:** ✅ Passed. Entering and leaving worked correctly, and the auto-refresh every 3 seconds showed the event generated from the external terminal on screen without manual intervention.
+- **Result after the fix:** Passed. Entering and leaving worked correctly, and the auto-refresh every 3 seconds showed the event generated from the external terminal on screen without manual intervention.
 
 ### Test 4 — Commit history screen
 
 - **What was tested:** that the TUI lists the latest backups made (commits of the `magiti-config-backup` repository), showing date and message legibly.
 - **Procedure:** the history screen was opened and the list shown was compared with `git log` run manually on the same repository.
-- **Actual result:** ✅ Passed. The list matched the real commit history, correctly showing the messages generated automatically by the daemon (e.g. "actualizado nat.conf", "eliminado config-test.conf"). Manual refresh with the `r` key worked correctly.
+- **Actual result:** Passed. The list matched the real commit history, correctly showing the messages generated automatically by the daemon (e.g. "actualizado nat.conf", "eliminado config-test.conf"). Manual refresh with the `r` key worked correctly.
 
 ### Test 5 — Watched folder management: installing a missing dependency
 
 - **What was tested:** building the project after adding the text input component (`textinput`) from the `bubbles` package, needed to capture the name of a new folder to watch.
-- **Actual result (first attempt):** ❌ The build failed with the error `could not import github.com/charmbracelet/bubbles/textinput`.
+- **Actual result (first attempt):** Failed. The build failed with the error `could not import github.com/charmbracelet/bubbles/textinput`.
 - **Root cause:** the `bubbles/textinput` package was not downloaded in the local environment nor referenced in `go.mod`/`go.sum`, even though `bubbles` was already listed as a general dependency of the project.
 - **Fix applied:**
   ```bash
   go get github.com/charmbracelet/bubbles/textinput
   go mod tidy
   ```
-- **Result after the fix:** ✅ Passed. The build finished without errors and the module was correctly referenced in `go.mod` and `go.sum`.
+- **Result after the fix:** Passed. The build finished without errors and the module was correctly referenced in `go.mod` and `go.sum`.
 
 ### Test 6 — Watched folder management: listing the current folders
 
 - **What was tested:** that the screen correctly shows the mapping of watched folders read from the daemon's `config.json`.
-- **Actual result:** ✅ Passed. `firewall → firewall` and `vpn → vpn` were listed, with working navigation between them using the arrow keys.
+- **Actual result:** Passed. `firewall → firewall` and `vpn → vpn` were listed, with working navigation between them using the arrow keys.
 
 ### Test 7 — Watched folder management: adding a new folder
 
@@ -90,7 +90,7 @@ Validate that the terminal interface lets the infrastructure administrator check
      mkdir -p ~/simulacion-configs/dns
      echo "registro de prueba" > ~/simulacion-configs/dns/registro.conf
      ```
-- **Actual result:** ✅ Passed on all four points:
+- **Actual result:** Passed on all four points:
   - `config.json` included `"dns": "dns"` after saving.
   - The daemon log showed a new start: `Daemon iniciado. Vigilando: ... (carpetas: vpn dns firewall)`.
   - The file `registro.conf` was detected and backed up automatically:
@@ -109,7 +109,7 @@ Validate that the terminal interface lets the infrastructure administrator check
      ```bash
      echo "esto no debería respaldarse" > ~/simulacion-configs/dns/otro.conf
      ```
-- **Actual result:** ✅ Passed.
+- **Actual result:** Passed.
   - `config.json` no longer included the `dns` entry.
   - The daemon log showed the restart with the updated mapping: `Daemon iniciado. Vigilando: ... (carpetas: vpn firewall)`.
   - The file `otro.conf` was correctly ignored:
@@ -127,7 +127,7 @@ Validate that the terminal interface lets the infrastructure administrator check
   4. The field was left empty and Enter was pressed — the message "el nombre no puede estar vacío" (the name cannot be empty) was shown without trying to save.
   5. A valid name (`dns2`) was typed and confirmed with Enter.
 - **Expected result:** cases 1–4 should prevent saving; case 5 should complete successfully.
-- **Actual result:** ✅ Passed in all five cases. The valid name `dns2` was saved correctly in `config.json` and the service restarted reflecting the new folder:
+- **Actual result:** Passed in all five cases. The valid name `dns2` was saved correctly in `config.json` and the service restarted reflecting the new folder:
   ```
   Daemon iniciado. Vigilando: /home/miguel/simulacion-configs (carpetas: vpn dns2 firewall)
   ```
@@ -145,16 +145,16 @@ Validate that the terminal interface lets the infrastructure administrator check
 
 | Feature | Covered |
 |---|---|
-| Check the service status | ✅ |
-| Start / stop / restart the service from the TUI | ✅ |
-| Log display with auto-refresh | ✅ |
-| Log coloring by level (INFO/WARN/ERROR) | ✅ |
-| Commit history (backups made) | ✅ |
-| List watched folders | ✅ |
-| Add a watched folder (with automatic restart) | ✅ |
-| Remove a watched folder (with automatic restart) | ✅ |
-| Folder name format validation (special characters, spaces) | ✅ |
-| Scrolling in long lists (logs/history with many entries) | ⏸️ Pending |
+| Check the service status | Yes |
+| Start / stop / restart the service from the TUI | Yes |
+| Log display with auto-refresh | Yes |
+| Log coloring by level (INFO/WARN/ERROR) | Yes |
+| Commit history (backups made) | Yes |
+| List watched folders | Yes |
+| Add a watched folder (with automatic restart) | Yes |
+| Remove a watched folder (with automatic restart) | Yes |
+| Folder name format validation (special characters, spaces) | Yes |
+| Scrolling in long lists (logs/history with many entries) | Pending |
 
 ## Conclusion
 
