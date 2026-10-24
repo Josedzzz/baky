@@ -39,6 +39,10 @@ type Watch struct {
 	// directory into service safely, such as "sudo -n shorewall try {dir}".
 	// It only runs when a file is restored from the history.
 	Apply string
+
+	// Exclude lists extra patterns of files and folders that are not
+	// backed up, on top of DefaultExcludes. See ValidateExclude.
+	Exclude []string
 }
 
 // Options configures a Backuper
@@ -146,7 +150,7 @@ func (b *Backuper) syncWatch(w Watch) int {
 		}
 	}
 
-	if err := mirror(w.Source, dest, warn); err != nil {
+	if err := mirror(w.Source, dest, newExcluder(w.Exclude), warn); err != nil {
 		// The backup already in the repository is left untouched: a folder
 		// that is missing or unreadable must not erase its own history.
 		b.logf(logging.Error, "Watched folder not accessible, skipping: %s (%v)", w.Source, err)

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Josedzzz/baky/internal/config"
+	"github.com/Josedzzz/baky/internal/gitbackup"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -40,6 +41,15 @@ func (m Model) handleWatchesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.state = watchCheckInputView
 			m.watchInput.Placeholder = "sudo -n shorewall check {dir}"
 			m.watchInput.SetValue(watches[m.watchesCursor].Check)
+			m.watchInput.CursorEnd()
+			m.watchInput.Focus()
+			m.message = ""
+		}
+	case "x":
+		if len(watches) > 0 {
+			m.state = watchExcludeInputView
+			m.watchInput.Placeholder = "*.conf.bak, certs/server.crt, keys/"
+			m.watchInput.SetValue(strings.Join(watches[m.watchesCursor].Exclude, ", "))
 			m.watchInput.CursorEnd()
 			m.watchInput.Focus()
 			m.message = ""
@@ -159,11 +169,12 @@ func (m Model) renderWatches(body *strings.Builder) {
 		// Hook commands of the selected folder
 		selected := m.configBackup.Watches[m.watchesCursor]
 		body.WriteString("\n" + headerStyle.Render("Validation: ") + commandOrNone(selected.Check) + "\n")
-		body.WriteString(headerStyle.Render("Apply:      ") + commandOrNone(selected.Apply) + "\n\n")
+		body.WriteString(headerStyle.Render("Apply:      ") + commandOrNone(selected.Apply) + "\n")
+		body.WriteString(headerStyle.Render("Excluded:   ") + excludesOrDefault(selected.Exclude) + "\n\n")
 	}
 
 	m.renderMessage(body)
-	body.WriteString(footerStyle.Render("a: add • c: validation commands • d: stop watching • esc: back"))
+	body.WriteString(footerStyle.Render("a: add • c: validation commands • x: excluded files • d: stop watching • esc: back"))
 }
 
 // renderWatchInput renders both steps of adding a watched folder
@@ -199,6 +210,56 @@ func commandOrNone(command string) string {
 		return mutedStyle.Render("(none)")
 	}
 	return command
+}
+
+// excludesOrDefault shows the extra exclude patterns of a watch on top of
+// the built-in list of secrets
+func excludesOrDefault(patterns []string) string {
+	if len(patterns) == 0 {
+		return mutedStyle.Render("private keys and secrets (built-in list)")
+	}
+	return strings.Join(patterns, ", ") + mutedStyle.Render(" + private keys and secrets")
+}
+
+// handleWatchExcludeInputUpdate handles editing the exclude patterns of a
+// watch, typed on one line separated by commas
+func (m Model) handleWatchExcludeInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch msg.String() {
+	case "esc":
+		m.state = watchesView
+		m.message = ""
+		return m, nil
+	case "enter":
+		source := m.configBackup.Watches[m.watchesCursor].Source
+		if err := config.SetWatchExcludes(source, strings.Split(m.watchInput.Value(), ",")); err != nil {
+			m.message = err.Error()
+			m.isSuccess = false
+			return m, nil
+		}
+		m.reloadConfigBackup()
+		m.state = watchesView
+		m.message = "Excluded files saved. Files already backed up that match are removed from the repository, but stay in its history."
+		m.isSuccess = true
+		return m, nil
+	}
+	m.watchInput, cmd = m.watchInput.Update(msg)
+	return m, cmd
+}
+
+// renderWatchExcludeInput renders the editing of the exclude patterns
+func (m Model) renderWatchExcludeInput(body *strings.Builder) {
+	body.WriteString(titleStyle.Render(" EXCLUDED FILES ") + "\n\n")
+	body.WriteString(headerStyle.Render("Folder: ") + itemStyle.Render(m.configBackup.Watches[m.watchesCursor].Source) + "\n\n")
+
+	body.WriteString("Extra patterns that are not backed up, separated by commas (empty = none):\n\n")
+	body.WriteString(m.watchInput.View() + "\n\n")
+	body.WriteString(mutedStyle.Render("\"*.bak\" matches a name in any folder, \"keys/\" a whole folder, and\n\"certs/server.crt\" that path inside the watched folder.") + "\n\n")
+	body.WriteString(mutedStyle.Render("Always excluded, as well as any file that holds a private key:") + "\n")
+	body.WriteString(mutedStyle.Width(72).Render(strings.Join(gitbackup.DefaultExcludes, " ")) + "\n\n")
+
+	m.renderMessage(body)
+	body.WriteString(footerStyle.Render("(esc: cancel • enter: save)"))
 }
 
 // handleWatchCommandInputUpdate handles the two steps of editing the hook

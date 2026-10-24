@@ -45,7 +45,7 @@ func loadPreviewCmd(cb config.ConfigBackup, commit gitbackup.Commit) tea.Cmd {
 	return func() tea.Msg {
 		watches := make([]gitbackup.Watch, len(cb.Watches))
 		for i, w := range cb.Watches {
-			watches[i] = gitbackup.Watch{Source: w.Source, Dest: w.Dest, Check: w.Check, Apply: w.Apply}
+			watches[i] = gitbackup.Watch{Source: w.Source, Dest: w.Dest, Check: w.Check, Apply: w.Apply, Exclude: w.Exclude}
 		}
 		preview, err := gitbackup.PreviewRestore(cb.RepoDir, watches, commit)
 		return previewLoadedMsg{preview: preview, err: err}
