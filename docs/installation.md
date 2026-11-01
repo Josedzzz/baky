@@ -25,7 +25,6 @@ sudo install -m 0755 baky /usr/local/bin/baky
 The interface and the service must run as **the same user**, because they share the files in `~/.config/baky/`. That user must be able to:
 
 - read the configuration folders that will be watched,
-- read the paths that will be backed up and write to the backup destination,
 - `git push` to the config repository with their SSH key.
 
 In the following steps that user is called `grid`; replace it with the real one.
@@ -73,8 +72,6 @@ Run `baky` as the chosen user:
 
 1. **Config backup → Repository**: `e`, type the path of the clone (`/home/grid/grid-config-data`) and confirm. `t` checks that it is a valid repository.
 2. **Config backup → Watched folders**: `a`, type the folder to watch (`/etc/openvpn`) and then the name it will have inside the repository (`vpn`).
-3. **File backup → Backup destination**: `e`, type the destination path (`/mnt/nas/backups`). `t` checks that it is accessible.
-4. **File backup → Manage paths**: `a` to add a path and `f` to choose its frequency.
 
 The service applies every change by itself. **Service → Live logs** shows what it is doing.
 
@@ -119,6 +116,8 @@ baky never backs up the usual names of keys and secrets (`*.key`, `*.pem`, `pki/
 
 After adding a folder, look at the log: every file left out for holding a private key shows up as `Not backed up, it holds a private key`. Then check on the remote that nothing secret got through.
 
+Excluded files are not backed up by baky at all, so make sure the VM backups of XCP-ng cover them.
+
 A file that was backed up before it was excluded stays in the history and on the remote. Change that secret, and rewrite the history if it must disappear.
 
 ## 7. Check that it works
@@ -128,6 +127,12 @@ echo "# test" | sudo tee -a /etc/openvpn/test.conf
 ```
 
 Within a few seconds, **Config backup → Change history** should show a commit `auto-backup: updated test.conf (...)`, and the log should show the lines `Commit created` and `Push succeeded`.
+
+## Upgrading from a version with file backups
+
+baky no longer makes `tar.gz` backups. `baky backup` and `baky restore` are gone, and the service stops the scheduled backups as soon as it is updated. Existing archives stay where they are and can be read with `tar -xzf`.
+
+The old paths and destination are ignored, and dropped from `config.json` on the next change. `state.json` is no longer used and can be deleted.
 
 ## Migrating from magiti-config-backup
 

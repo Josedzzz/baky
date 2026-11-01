@@ -1,6 +1,5 @@
-// Package daemon runs the automatic backups without a user interface:
-// the versioned backup of configuration files and the scheduled and
-// on-change backups of files. It is what "baky daemon" executes.
+// Package daemon runs the versioned backup of configuration files without
+// a user interface. It is what "baky daemon" executes.
 package daemon
 
 import (
@@ -13,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Josedzzz/baky/internal/backup"
 	"github.com/Josedzzz/baky/internal/config"
 	"github.com/Josedzzz/baky/internal/gitbackup"
 	"github.com/Josedzzz/baky/internal/logging"
@@ -23,38 +21,13 @@ import (
 // reloadDelay groups the several writes of one config save into one reload
 const reloadDelay = 500 * time.Millisecond
 
-// settings is the part of the configuration the daemon acts on. A change
-// to anything else (the history, for example) does not restart the engines.
-type settings struct {
-	NasPath      string
-	BackupPaths  []pathSetting
-	ConfigBackup config.ConfigBackup
+func loadSettings() (config.ConfigBackup, error) {
+	return config.GetConfigBackup()
 }
 
-type pathSetting struct {
-	Path      string
-	Frequency string
-}
-
-func loadSettings() (settings, error) {
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		return settings{}, err
-	}
-
-	s := settings{NasPath: cfg.NasPath, ConfigBackup: cfg.ConfigBackup}
-	if s.ConfigBackup.Branch == "" {
-		s.ConfigBackup.Branch = config.DefaultBranch
-	}
-	for _, p := range cfg.BackupPaths {
-		s.BackupPaths = append(s.BackupPaths, pathSetting{Path: p.Path, Frequency: p.Frequency})
-	}
-	return s, nil
-}
-
-// Run executes the daemon until ctx is cancelled. The engines are
-// restarted whenever the configuration file changes, so changes made
-// from the TUI apply without restarting the service.
+// Run executes the daemon until ctx is cancelled. The backup is restarted
+// whenever the configuration file changes, so changes made from the TUI
+// apply without restarting the service.
 func Run(ctx context.Context) error {
 	logger, err := logging.New(config.LogPath(), os.Stdout)
 	if err != nil {
@@ -79,7 +52,7 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	stop := startEngines(ctx, current, logger)
+	stop := startBackup(ctx, current, logger)
 	defer func() { stop() }()
 
 	var reload <-chan time.Time
@@ -110,7 +83,7 @@ func Run(ctx context.Context) error {
 			logger.Log(logging.Info, "Configuration changed, applying the changes.")
 			stop()
 			current = next
-			stop = startEngines(ctx, current, logger)
+			stop = startBackup(ctx, current, logger)
 
 		case err, ok := <-watcher.Errors:
 			if !ok {
@@ -121,22 +94,21 @@ func Run(ctx context.Context) error {
 	}
 }
 
-// startEngines starts both backup engines with the given settings and
-// returns the function that stops them and waits until they finish
-func startEngines(ctx context.Context, s settings, logger *logging.Logger) (stop func()) {
+// startBackup starts the config backup with the given settings and
+// returns the function that stops it and waits until it finishes
+func startBackup(ctx context.Context, cb config.ConfigBackup, logger *logging.Logger) (stop func()) {
 	ctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 
-	logger.Log(logging.Info, "Daemon started. "+describe(s))
+	logger.Log(logging.Info, "Daemon started. "+describe(cb))
 
-	// Versioned backup of configuration files
-	if s.ConfigBackup.RepoDir != "" && len(s.ConfigBackup.Watches) > 0 {
+	if cb.RepoDir != "" && len(cb.Watches) > 0 {
 		opts := gitbackup.Options{
-			RepoDir: s.ConfigBackup.RepoDir,
-			Branch:  s.ConfigBackup.Branch,
+			RepoDir: cb.RepoDir,
+			Branch:  cb.Branch,
 			Log:     logger.Log,
 		}
-		for _, w := range s.ConfigBackup.Watches {
+		for _, w := range cb.Watches {
 			opts.Watches = append(opts.Watches, gitbackup.Watch{Source: w.Source, Dest: w.Dest, Check: w.Check, Apply: w.Apply, Exclude: w.Exclude})
 		}
 
@@ -154,17 +126,6 @@ func startEngines(ctx context.Context, s settings, logger *logging.Logger) (stop
 		}
 	}
 
-	// Scheduled and on-change backups of files
-	if len(s.BackupPaths) > 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := backup.Run(ctx, logger.Log); err != nil {
-				logger.Logf(logging.Error, "File backup stopped: %v", err)
-			}
-		}()
-	}
-
 	return func() {
 		cancel()
 		wg.Wait()
@@ -172,14 +133,14 @@ func startEngines(ctx context.Context, s settings, logger *logging.Logger) (stop
 }
 
 // describe summarizes what the daemon is watching, for the log
-func describe(s settings) string {
+func describe(cb config.ConfigBackup) string {
 	var sources []string
-	for _, w := range s.ConfigBackup.Watches {
+	for _, w := range cb.Watches {
 		sources = append(sources, w.Source)
 	}
 	watching := "none"
 	if len(sources) > 0 {
 		watching = strings.Join(sources, ", ")
 	}
-	return fmt.Sprintf("Watched configurations: %s. File backup paths: %d.", watching, len(s.BackupPaths))
+	return fmt.Sprintf("Watched configurations: %s.", watching)
 }

@@ -19,13 +19,6 @@ var helpSections = []struct {
 		{"q", "quit (in the menus)"},
 		{"ctrl+c", "quit from any screen"},
 	}},
-	{"File backup", [][2]string{
-		{"a / e / d", "add, edit or delete a path"},
-		{"f", "change the frequency: daily, weekly, on change"},
-		{"enter", "back up the selected path / restore a backup"},
-		{"o / c", "restore to the original location or to another path"},
-		{"enter / r", "before restoring: view the differences of a file / continue"},
-	}},
 	{"Config backup", [][2]string{
 		{"a / d", "add a watched folder or stop watching it"},
 		{"c", "set the commands that validate and apply a folder"},

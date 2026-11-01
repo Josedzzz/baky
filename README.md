@@ -1,21 +1,20 @@
 # baky
 
-Terminal tool for backing up the infrastructure of the GRID Research Group from a single place:
+Terminal tool for backing up the configuration files of the GRID Research Group infrastructure. It watches configuration folders (Firewall, VPN, DNS...) and records every change as a commit in a Git repository, with history, a line-by-line `diff`, and validated restores of any earlier version.
 
-- **File backup**: compresses files and folders into `tar.gz` archives sent to a backup destination (for example a NAS), manually, on a schedule or when changes are detected, and restores them.
-- **Config backup**: watches configuration folders (Firewall, VPN, DNS...) and records every change as a commit in a Git repository, with history and a line-by-line `diff`.
+baky is only for small configuration files. Virtual machines and their data are backed up with the XCP-ng tools (snapshots and XAPI), which also cover what baky leaves out of Git on purpose, such as private keys.
 
-It is written in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea). It is a single program with two modes: a terminal interface (TUI) for the administrator and a background service that runs the automatic backups.
+It is written in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea). It is a single program with two modes: a terminal interface (TUI) for the administrator and a background service that makes the automatic backups.
 
 Project developed as part of the **MAGITI** degree project: *Modelo de Automatización para la Gestión de la Infraestructura de TI del Grupo de Investigación GRID* (Automation Model for the IT Infrastructure Management of the GRID Research Group).
 
 ## Origin
 
-baky unifies three tools that used to be installed and maintained separately:
+baky grew out of three tools that used to be installed and maintained separately:
 
 | Original tool | What it did | Where it ended up in baky |
 |---|---|---|
-| `baky` | File backup to `tar.gz` and restore | `internal/backup`, `internal/restore` |
+| `baky` | File backup to `tar.gz` and restore | Removed: VMs and their data are backed up with XCP-ng |
 | [`magiti-config-backup`](https://github.com/MiguelFVasquez/magiti-config-backup) | Bash daemon that versioned configurations in Git | `internal/gitbackup`, rewritten in Go |
 | [`magiti-backup-tui`](https://github.com/MiguelFVasquez/magiti-backup-tui) | TUI to control that daemon | *Config backup* and *Service* menus |
 
@@ -34,7 +33,6 @@ baky help                          Shows the help
 
 ```
 BAKY
-  File backup     Manage paths · Back up now · View backups / Restore · Backup destination
   Config backup   Watched folders · Change history · Repository
   Service         Service status · Live logs
   Help
@@ -43,7 +41,7 @@ BAKY
 
 Common keys: `↑/↓` or `k/j` to navigate, `enter` to select, `esc` to go back, `?` for help and `q` to quit.
 
-The automatic backups are run by the service, not by the interface: you can close the TUI without interrupting them. Changes made from the TUI (adding a path, watching a new folder) are applied by the service by itself, without restarting it.
+The automatic backups are run by the service, not by the interface: you can close the TUI without interrupting them. Changes made from the TUI (watching a new folder, changing a command) are applied by the service by itself, without restarting it.
 
 ## Quick install
 
@@ -59,37 +57,6 @@ Requirements: Go 1.24 or later to build, `git` for the config backup and `system
 The full installation (service, permissions and config repository) is in [docs/installation.md](docs/installation.md).
 
 ## How it works
-
-### File backup
-
-Each configured path has a frequency:
-
-| Frequency | When it is backed up |
-|---|---|
-| Daily | Every day, during the 3 AM hour |
-| Weekly | On Sundays, during the 3 AM hour |
-| On change | A few seconds after a file in the path changes |
-
-Backups are stored at the destination as `[name]_YYYYMMDD_HHMMSS.tar.gz`. When restoring you can choose the original location or another path, and what to do if there are files already:
-
-- **Overwrite**: replaces the files that are in the backup and keeps the rest.
-- **Rename**: keeps what exists under a name with the date and restores the backup.
-- **Skip**: does not restore if there are files already.
-
-Before restoring, baky shows what would change at the chosen destination:
-
-```
-RESTORE CHANGES
-M modified: 1   + created: 1   = unchanged: 1
-
-M report.txt  (modified)
-+ deleted.txt  (created)
-= same.txt  (unchanged)
-```
-
-With `enter` on a file you see its line-by-line differences against the current file (in red what is removed, in green what comes back), and `r` continues with the restore. This preview changes nothing. The line-by-line comparison uses `git`, and only applies to text files.
-
-The backup is always extracted to a temporary folder first: a damaged backup never changes what already exists at the destination.
 
 ### Config backup
 
@@ -115,6 +82,8 @@ The config repository is pushed to a remote, so baky never backs up:
 - any file that holds a private key, whatever its name: PEM and OpenSSH keys, and OpenVPN static keys, including those inlined in a `.conf`. The log says which files were left out.
 
 `x` in *Watched folders* adds more patterns to a folder, separated by commas: `*.bak` matches a name in any subfolder, `keys/` a whole folder, and `certs/server.crt` that path inside the watched folder.
+
+Excluded files are not backed up by baky at all: they rely on the backups of the machine itself, made with XCP-ng.
 
 A file that was backed up before it was excluded is removed from the repository, but earlier commits, and the remote, still hold it. If it is a secret, change it. Erasing it from the history needs a rewrite of the repository, with a tool such as `git filter-repo`.
 
@@ -166,19 +135,13 @@ They all live in `~/.config/baky/` of the user that runs baky. The `BAKY_CONFIG`
 
 | File | Contents |
 |---|---|
-| `config.json` | Settings: destination, paths, repository and watched folders |
-| `state.json` | Backup and restore history, last backup of each path |
+| `config.json` | Settings: repository and watched folders |
 | `baky.log` | Activity log of the service |
 
 Example `config.json`:
 
 ```json
 {
-  "nas_path": "/mnt/nas/backups",
-  "backup_paths": [
-    { "path": "/home/grid/documents", "frequency": "daily" },
-    { "path": "/etc/nginx/nginx.conf", "frequency": "on_change" }
-  ],
   "config_backup": {
     "repo_dir": "/home/grid/grid-config-data",
     "branch": "main",
@@ -203,12 +166,10 @@ You don't need to edit it by hand: everything is configured from the interface.
 baky/
 ├── cmd/main.go            Entry point: TUI, daemon and import
 ├── internal/
-│   ├── backup/            File backup (tar.gz) and its scheduling
-│   ├── restore/           Listing, comparing and restoring backups
 │   ├── gitbackup/         Versioned config backup in Git
-│   ├── daemon/            Service: runs both engines and reloads the configuration
+│   ├── daemon/            Service: runs the backup and reloads the configuration
 │   ├── service/           Control of the systemd service
-│   ├── config/            Configuration and state shared by the TUI and the service
+│   ├── config/            Configuration shared by the TUI and the service
 │   ├── logging/           Writing and reading the service log
 │   ├── watch/             Recursive folder watching (fsnotify)
 │   ├── textdiff/          Line-by-line comparison of two versions of a file
@@ -233,11 +194,9 @@ They do not use the network or touch the real configuration: each test works in 
 
 | Package | What its tests cover |
 |---|---|
-| `internal/backup` | Creating the `tar.gz` (folders, single file, symlinks) and when a scheduled backup is due |
-| `internal/restore` | Restore with overwrite, rename and skip; damaged backup; single file; preview of the changes |
 | `internal/gitbackup` | Creating, modifying, deleting and renaming files; subfolders; moved folders; temporary files; push failure and retry; excluded files and secrets; validating every change; comparing and restoring an earlier version with prior validation |
-| `internal/daemon` | The whole service with both engines and a live configuration change |
-| `internal/config` | Saving, history in `state.json`, migrating old configurations, damaged file, watched folders |
+| `internal/daemon` | The whole service and a live configuration change |
+| `internal/config` | Saving, dropping old settings, damaged file, watched folders, exclude patterns |
 | `internal/tui` | Navigating the menus and the main flows, by sending keys to the model |
 | `internal/logging`, `internal/watch`, `internal/textdiff` | Log format and reading; recursive watching; line-by-line comparison |
 
@@ -252,7 +211,7 @@ go build -o baky ./cmd
 
 export TEST=/tmp/baky-test
 export BAKY_CONFIG=$TEST/cfg/config.json
-mkdir -p $TEST/cfg $TEST/etc/firewall $TEST/docs $TEST/nas
+mkdir -p $TEST/cfg $TEST/etc/firewall
 
 # A local "remote" repository and its clone, which acts as the config repository
 git init --bare --initial-branch=main $TEST/remote.git
@@ -260,7 +219,6 @@ git init --initial-branch=main $TEST/repo
 git -C $TEST/repo remote add origin $TEST/remote.git
 
 echo "rule 1" > $TEST/etc/firewall/rules.conf
-echo "hello" > $TEST/docs/report.txt
 ```
 
 **2. Start the service in a terminal**
@@ -302,22 +260,7 @@ The main menu will show the service as inactive: that is expected, because in th
 
 To test the sync on startup: stop the daemon with `Ctrl+C`, change a file in the watched folder and start it again. The change must be backed up on startup.
 
-**5. Test the file backup**
-
-1. *File backup → Backup destination*: `e`, type `/tmp/baky-test/nas`, `enter`; `t` should say it is accessible.
-2. *File backup → Manage paths*: `a`, type `/tmp/baky-test/docs`, `enter`.
-3. *File backup → Back up now*: `enter`. A `docs_YYYYMMDD_HHMMSS.tar.gz` should appear in `/tmp/baky-test/nas`.
-4. *View backups / Restore*: `enter` on the backup, `c`, type `/tmp/baky-test/restored`, `enter`. The list of restore changes appears (here, `report.txt` is created); `r` to continue and `enter` to confirm. The file `report.txt` should appear in that folder.
-5. Preview with differences: modify the original file (`echo "another line" >> /tmp/baky-test/docs/report.txt`), go back to *View backups / Restore*, `enter` on the backup and `o` (original location). The file shows up as "modified"; `enter` shows the line that would be removed.
-6. On-change backup: in *Manage paths* press `f` until you see `[on change]`, then modify a file:
-
-   ```bash
-   echo "change" >> /tmp/baky-test/docs/report.txt
-   ```
-
-   About 5 seconds later the daemon creates a new `tar.gz`, and the log shows `On-change backup started` and `Backup completed`.
-
-**6. Clean up**
+**5. Clean up**
 
 ```bash
 rm -rf /tmp/baky-test
@@ -328,11 +271,8 @@ Testing on a real installation (systemd service and remote repository) is in ste
 
 ## To do
 
-- Backup retention policy (delete the oldest ones automatically).
-- Encryption of the backups and of the config repository, so secrets can be backed up too.
+- Encryption of the config repository, so secrets can be backed up too.
 - Alerts when the service fails.
-- Comparing backup versions from the interface (`internal/restore/diff.go` already computes the differences).
-- Consistent backup of running virtual machines.
 
 ## Documentation
 
