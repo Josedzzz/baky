@@ -114,12 +114,19 @@ func TestAddAndRemoveWatchedFolder(t *testing.T) {
 
 	// A path that does not exist is rejected in the first step
 	m = press(t, m, "a", "/does/not/exist", "enter")
-	assertShows(t, m, "Step 1 of 2", "does not exist or is not a folder")
+	assertShows(t, m, "Step 1 of 3", "does not exist or is not a folder")
 
 	m = press(t, m, "esc", "a", source, "enter")
-	assertShows(t, m, "Step 2 of 2", source)
+	assertShows(t, m, "Step 2 of 3", source)
 	if m.watchInput.Value() != "openvpn" {
 		t.Errorf("expected the folder name as the suggested destination, got %q", m.watchInput.Value())
+	}
+
+	// Nothing is saved until the excludes are given
+	m = press(t, m, "enter")
+	assertShows(t, m, "Step 3 of 3", "*.key", "first backup")
+	if cb, _ := config.GetConfigBackup(); len(cb.Watches) != 0 {
+		t.Fatalf("the watch must wait for its excludes: %+v", cb.Watches)
 	}
 
 	m = press(t, m, "enter")
@@ -309,5 +316,44 @@ func TestEditWatchExcludes(t *testing.T) {
 	m = press(t, m, "x")
 	if m.watchInput.Value() != "*.bak, keys/" {
 		t.Errorf("expected the saved patterns in the input, got %q", m.watchInput.Value())
+	}
+}
+
+func TestAddWatchWithExcludes(t *testing.T) {
+	m := newTestModel(t)
+	source := filepath.Join(t.TempDir(), "openvpn")
+	os.MkdirAll(source, 0o755)
+	config.AddWatch("/etc/shorewall", "firewall")
+	m.reloadConfigBackup()
+	m.state = watchesView
+
+	// A name already in use is rejected in its own step
+	m = press(t, m, "a", source, "enter")
+	m.watchInput.SetValue("firewall")
+	m = press(t, m, "enter")
+	assertShows(t, m, "Step 2 of 3", "already used")
+
+	// A bad pattern keeps the step open and saves nothing
+	m.watchInput.SetValue("vpn")
+	m = press(t, m, "enter", "/abs", "enter")
+	assertShows(t, m, "Step 3 of 3", "must be relative")
+	if cb, _ := config.GetConfigBackup(); len(cb.Watches) != 1 {
+		t.Fatalf("a rejected pattern must not add the watch: %+v", cb.Watches)
+	}
+
+	// esc cancels the whole thing
+	m = press(t, m, "esc")
+	if cb, _ := config.GetConfigBackup(); len(cb.Watches) != 1 {
+		t.Fatalf("cancelling must not add the watch: %+v", cb.Watches)
+	}
+
+	m = press(t, m, "a", source, "enter")
+	m.watchInput.SetValue("vpn")
+	m = press(t, m, "enter", "*.bak, keys/", "enter")
+	assertShows(t, m, "WATCHED FOLDERS", "added")
+
+	cb, _ := config.GetConfigBackup()
+	if len(cb.Watches) != 2 || strings.Join(cb.Watches[1].Exclude, " ") != "*.bak keys/" {
+		t.Errorf("expected the excludes to be saved with the watch: %+v", cb.Watches)
 	}
 }

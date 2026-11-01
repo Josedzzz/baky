@@ -81,7 +81,7 @@ The config repository is pushed to a remote, so baky never backs up:
 - files and folders with the usual names of keys and secrets: `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `shadow`, `gshadow`, `*.secret`, `*.secrets` and the folders `pki/`, `private/` and `secrets/`;
 - any file that holds a private key, whatever its name: PEM and OpenSSH keys, and OpenVPN static keys, including those inlined in a `.conf`. The log says which files were left out.
 
-`x` in *Watched folders* adds more patterns to a folder, separated by commas: `*.bak` matches a name in any subfolder, `keys/` a whole folder, and `certs/server.crt` that path inside the watched folder.
+When you add a folder, the last step asks for more patterns, before the first backup runs. `x` in *Watched folders* changes them later. They are separated by commas: `*.bak` matches a name in any subfolder, `keys/` a whole folder, and `certs/server.crt` that path inside the watched folder.
 
 Excluded files are not backed up by baky at all: they rely on the backups of the machine itself, made with XCP-ng.
 
@@ -242,7 +242,7 @@ The main menu will show the service as inactive: that is expected, because in th
 **4. Test the config backup**
 
 1. *Config backup → Repository*: `e`, type `/tmp/baky-test/repo`, `enter`.
-2. *Config backup → Watched folders*: `a`, type `/tmp/baky-test/etc/firewall`, `enter`, accept the name `firewall` with `enter`.
+2. *Config backup → Watched folders*: `a`, type `/tmp/baky-test/etc/firewall`, `enter`, accept the name `firewall` with `enter`, and `enter` again to add no extra excludes.
 3. In a third terminal, modify, create and delete files:
 
    ```bash

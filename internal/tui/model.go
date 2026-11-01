@@ -30,6 +30,9 @@ const (
 	// watchDestInputView is a sub-state for typing the folder name inside the repository
 	watchDestInputView
 
+	// watchNewExcludeInputView is a sub-state for typing the exclude patterns of a new watch
+	watchNewExcludeInputView
+
 	// watchConfirmDeleteView asks for confirmation before a folder stops being watched
 	watchConfirmDeleteView
 
@@ -85,6 +88,7 @@ type Model struct {
 	watchInput    textinput.Model // Input for the folder to watch and its destination name
 	repoInput     textinput.Model // Input for the config repository path
 	pendingSource string          // folder typed in the first step of adding a watch
+	pendingDest   string          // repository folder typed in the second step
 	pendingCheck  string          // validation command typed before the apply command
 	commits       []gitbackup.Commit
 	commitsErr    string
