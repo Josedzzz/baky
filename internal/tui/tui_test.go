@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Josedzzz/baky/internal/backup"
 	"github.com/Josedzzz/baky/internal/config"
 	"github.com/Josedzzz/baky/internal/gitbackup"
 	tea "github.com/charmbracelet/bubbletea"
@@ -62,7 +61,7 @@ func assertShows(t *testing.T, m Model, texts ...string) {
 
 func TestMenuNavigation(t *testing.T) {
 	m := newTestModel(t)
-	assertShows(t, m, "MAIN MENU", "File backup", "Config backup", "Service", "Help", "Quit")
+	assertShows(t, m, "MAIN MENU", "Config backup", "Service", "Help", "Quit")
 
 	// Every entry of every menu opens a screen that renders something
 	for state, current := range menus {
@@ -83,7 +82,7 @@ func TestMenuNavigation(t *testing.T) {
 
 	// A submenu remembers its place and esc walks back up
 	m = newTestModel(t)
-	m = press(t, m, "down", "enter")
+	m = press(t, m, "enter")
 	assertShows(t, m, "CONFIG BACKUP", "Watched folders", "Change history", "Repository")
 	m = press(t, m, "down", "down", "enter")
 	assertShows(t, m, "CONFIG REPOSITORY")
@@ -92,8 +91,8 @@ func TestMenuNavigation(t *testing.T) {
 		t.Errorf("expected to return to the third entry of the config menu, got state %d cursor %d", m.state, m.cursor)
 	}
 	m = press(t, m, "esc")
-	if m.state != menuView || m.cursor != 1 {
-		t.Errorf("expected to return to the second entry of the main menu, got state %d cursor %d", m.state, m.cursor)
+	if m.state != menuView || m.cursor != 0 {
+		t.Errorf("expected to return to the first entry of the main menu, got state %d cursor %d", m.state, m.cursor)
 	}
 
 	m = press(t, m, "?")
@@ -144,27 +143,6 @@ func TestAddAndRemoveWatchedFolder(t *testing.T) {
 	if cb, _ := config.GetConfigBackup(); len(cb.Watches) != 0 {
 		t.Errorf("expected the watch to be removed, got %+v", cb.Watches)
 	}
-}
-
-func TestManagePaths(t *testing.T) {
-	m := newTestModel(t)
-	m.state = managePathsView
-
-	m = press(t, m, "a", "/home/user/docs", "enter")
-	assertShows(t, m, "/home/user/docs", "[daily]", "Path added")
-
-	m = press(t, m, "f")
-	assertShows(t, m, "[weekly]")
-	m = press(t, m, "f")
-	assertShows(t, m, "[on change]")
-
-	paths, _ := config.GetPaths()
-	if len(paths) != 1 || paths[0].Frequency != config.FreqOnChange {
-		t.Fatalf("path not saved: %+v", paths)
-	}
-
-	m = press(t, m, "d")
-	assertShows(t, m, "No paths added yet", "Path deleted")
 }
 
 func TestConfigRepoScreen(t *testing.T) {
@@ -274,97 +252,6 @@ func TestRestoreConfigFromHistory(t *testing.T) {
 	assertShows(t, m, "CHANGE HISTORY", "restored")
 	if got, _ := os.ReadFile(live); string(got) != "rule 1\nrule 2\n" {
 		t.Errorf("expected the old version to be restored, got %q", got)
-	}
-}
-
-func TestRestorePreviewAndFileDiff(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not installed")
-	}
-	m := newTestModel(t)
-
-	root := t.TempDir()
-	source := filepath.Join(root, "docs")
-	nas := filepath.Join(root, "nas")
-	os.MkdirAll(source, 0o755)
-	os.MkdirAll(nas, 0o755)
-	os.WriteFile(filepath.Join(source, "report.txt"), []byte("line 1\nline 2\n"), 0o644)
-	os.WriteFile(filepath.Join(source, "same.txt"), []byte("no changes\n"), 0o644)
-	os.WriteFile(filepath.Join(source, "deleted.txt"), []byte("comes back\n"), 0o644)
-
-	config.SaveNasPath(nas)
-	config.SavePaths([]config.BackupPathConfig{{Path: source, Frequency: config.FreqDaily}})
-	if err := backup.RunBackup(source); err != nil {
-		t.Fatal(err)
-	}
-
-	// The folder changes after the backup
-	os.WriteFile(filepath.Join(source, "report.txt"), []byte("line 1\nline CHANGED\n"), 0o644)
-	os.Remove(filepath.Join(source, "deleted.txt"))
-	os.WriteFile(filepath.Join(source, "new.txt"), []byte("not in the backup\n"), 0o644)
-
-	// run executes the command a key press returned and feeds its result back
-	run := func(m Model, key string) Model {
-		t.Helper()
-		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
-		if key == "enter" {
-			msg = tea.KeyMsg{Type: tea.KeyEnter}
-		}
-		updated, cmd := m.Update(msg)
-		if cmd == nil {
-			t.Fatalf("expected %q to start a command", key)
-		}
-		updated, _ = updated.(Model).Update(cmd())
-		return updated.(Model)
-	}
-
-	// Files menu → view backups → select the backup → original location
-	m.state, m.cursor = filesMenuView, 2
-	m = press(t, m, "enter", "enter")
-	assertShows(t, m, "RESTORE DESTINATION")
-	m = run(m, "o")
-
-	assertShows(t, m, "RESTORE CHANGES",
-		"M modified: 1", "+ created: 1", "= unchanged: 1",
-		"report.txt  (modified)", "deleted.txt  (created)", "same.txt  (unchanged)",
-		"Files at the destination that are not in the backup: 1")
-	tempCopy := m.restorePreview.Files[0].BackupPath
-
-	// The modified file is first: enter shows its differences
-	m = run(m, "enter")
-	assertShows(t, m, "FILE DIFFERENCES", filepath.Join(source, "report.txt"),
-		"Changes from line 1 of the current file", "- line CHANGED", "+ line 2")
-
-	// Back to the list, then on to the restore itself
-	m = press(t, m, "esc")
-	assertShows(t, m, "RESTORE CHANGES")
-	m = press(t, m, "r")
-	assertShows(t, m, "EXISTING FILES", "Overwrite")
-	if m = press(t, m, "esc"); m.state != restorePreviewView {
-		t.Errorf("expected esc to return to the preview, got state %d", m.state)
-	}
-
-	m = press(t, m, "r")
-	m = run(m, "enter")
-	assertShows(t, m, "VIEW BACKUPS", "Restored 3 files")
-
-	// The restore brought the backup back and kept the unrelated file
-	for name, want := range map[string]string{
-		"report.txt":  "line 1\nline 2\n",
-		"deleted.txt": "comes back\n",
-		"new.txt":     "not in the backup\n",
-	} {
-		if got, _ := os.ReadFile(filepath.Join(source, name)); string(got) != want {
-			t.Errorf("%s: expected %q, got %q", name, want, got)
-		}
-	}
-
-	// The temporary copy of the backup is gone
-	if m.restorePreview != nil {
-		t.Errorf("expected the preview to be closed after the restore")
-	}
-	if _, err := os.Stat(tempCopy); !os.IsNotExist(err) {
-		t.Errorf("expected the temporary copy to be removed")
 	}
 }
 

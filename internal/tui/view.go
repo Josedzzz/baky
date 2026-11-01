@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/Josedzzz/baky/internal/config"
-	"github.com/Josedzzz/baky/internal/restore"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -37,18 +36,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewports()
 		return m, nil
 
-	case backupFinishedMsg:
-		return m.handleBackupFinished(msg)
-
-	case restoreFinishedMsg:
-		return m.handleRestoreFinished(msg)
-
-	case restorePreviewLoadedMsg:
-		return m.handleRestorePreviewLoaded(msg)
-
-	case fileDiffLoadedMsg:
-		return m.handleFileDiffLoaded(msg)
-
 	case serviceStateMsg:
 		return m.handleServiceState(msg)
 
@@ -76,33 +63,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
-			// Do not leave the temporary copy of a backup behind
-			m.restorePreview.Close()
 			return m, tea.Quit
 		}
 		switch m.state {
-		case inputView:
-			return m.handleInputUpdate(msg)
-		case managePathsView:
-			return m.handleManagePathsUpdate(msg)
-		case configureBackupDestView:
-			return m.handleConfigureBackupDestUpdate(msg)
-		case backupDestInputView:
-			return m.handleBackupDestInputUpdate(msg)
-		case backupFilesView:
-			return m.handleBackupFilesUpdate(msg)
-		case viewBackupsView:
-			return m.handleViewBackupsUpdate(msg)
-		case selectRestoreDestView:
-			return m.handleSelectRestoreDestUpdate(msg)
-		case selectRestoreActionView:
-			return m.handleSelectRestoreActionUpdate(msg)
-		case restorePreviewView:
-			return m.handleRestorePreviewUpdate(msg)
-		case restoreFileDiffView:
-			return m.handleRestoreFileDiffUpdate(msg)
-		case restoreInputView:
-			return m.handleRestoreInputUpdate(msg)
 		case watchesView:
 			return m.handleWatchesUpdate(msg)
 		case watchSourceInputView:
@@ -153,28 +116,6 @@ func (m Model) View() string {
 		body.WriteString(miniLogoStyle.Render(miniLogo) + "\n")
 
 		switch m.state {
-		case inputView:
-			m.renderPathInput(&body)
-		case managePathsView:
-			m.renderManagePaths(&body)
-		case backupFilesView:
-			m.renderBackupFiles(&body)
-		case configureBackupDestView:
-			m.renderBackupDest(&body)
-		case backupDestInputView:
-			m.renderBackupDestInput(&body)
-		case viewBackupsView:
-			m.renderViewBackups(&body)
-		case selectRestoreDestView:
-			m.renderSelectRestoreDest(&body)
-		case restoreInputView:
-			m.renderRestoreInput(&body)
-		case selectRestoreActionView:
-			m.renderSelectRestoreAction(&body)
-		case restorePreviewView:
-			m.renderRestorePreview(&body)
-		case restoreFileDiffView:
-			m.renderRestoreFileDiff(&body)
 		case watchesView:
 			m.renderWatches(&body)
 		case watchSourceInputView, watchDestInputView:
@@ -249,28 +190,10 @@ func (m *Model) resizeViewports() {
 	m.diffView.Width, m.diffView.Height = width, diffHeight
 }
 
-// reloadPaths refreshes the file backup settings from the config
-func (m *Model) reloadPaths() {
-	m.paths, _ = config.GetPaths()
-	m.history, _ = config.GetHistory()
-	m.backupDest, _ = config.GetNasPath()
-}
-
 // reloadConfigBackup refreshes the config backup settings from the config
 func (m *Model) reloadConfigBackup() {
 	m.configBackup, _ = config.GetConfigBackup()
 	if m.watchesCursor >= len(m.configBackup.Watches) {
 		m.watchesCursor = 0
 	}
-}
-
-// actionLabel returns the name of a restore action as stored in the history
-func actionLabel(action restore.RestoreAction) string {
-	switch action {
-	case restore.RestoreActionRename:
-		return "rename"
-	case restore.RestoreActionSkip:
-		return "skip"
-	}
-	return "overwrite"
 }

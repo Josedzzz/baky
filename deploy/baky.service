@@ -1,5 +1,5 @@
 [Unit]
-Description=baky - automatic backup of files and configurations
+Description=baky - automatic backup of configuration files
 After=network-online.target
 Wants=network-online.target
 

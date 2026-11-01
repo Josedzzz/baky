@@ -27,20 +27,10 @@ var menus = map[sessionState]menu{
 	menuView: {
 		title: " MAIN MENU ",
 		entries: []menuEntry{
-			{"File backup", filesMenuView},
 			{"Config backup", configMenuView},
 			{"Service", serviceMenuView},
 			{"Help", helpView},
 			{"Quit", quitEntry},
-		},
-	},
-	filesMenuView: {
-		title: " FILE BACKUP ",
-		entries: []menuEntry{
-			{"Manage paths", managePathsView},
-			{"Back up now", backupFilesView},
-			{"View backups / Restore", viewBackupsView},
-			{"Backup destination", configureBackupDestView},
 		},
 	},
 	configMenuView: {
@@ -115,21 +105,8 @@ func (m Model) open(target sessionState) (tea.Model, tea.Cmd) {
 	m.message = ""
 
 	switch target {
-	case filesMenuView, configMenuView, serviceMenuView:
+	case configMenuView, serviceMenuView:
 		m.cursor = m.menuCursors[target]
-	case managePathsView:
-		m.reloadPaths()
-		m.pathsCursor = 0
-	case backupFilesView:
-		m.reloadPaths()
-		m.pathsCursor = 0
-		m.historyOffset = 0
-	case viewBackupsView:
-		m.loadBackups()
-		m.backupsCursor = 0
-		m.backupsOffset = 0
-	case configureBackupDestView:
-		m.reloadPaths()
 	case watchesView:
 		m.reloadConfigBackup()
 		m.watchesCursor = 0
@@ -189,9 +166,9 @@ func (m Model) renderMenu(body *strings.Builder) {
 
 // summary describes the current setup in the main menu
 func (m Model) summary() string {
-	dest := "not configured"
-	if m.backupDest != "" {
-		dest = m.backupDest
+	repo := "not configured"
+	if m.configBackup.RepoDir != "" {
+		repo = m.configBackup.RepoDir
 	}
 
 	serviceState := "checking..."
@@ -204,6 +181,6 @@ func (m Model) summary() string {
 		}
 	}
 
-	return fmt.Sprintf("\nBackup destination: %s\nFile paths: %d • Watched folders: %d\nService: %s",
-		dest, len(m.paths), len(m.configBackup.Watches), serviceState)
+	return fmt.Sprintf("\nRepository: %s\nWatched folders: %d\nService: %s",
+		repo, len(m.configBackup.Watches), serviceState)
 }

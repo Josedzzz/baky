@@ -3,7 +3,6 @@ package tui
 import (
 	"github.com/Josedzzz/baky/internal/config"
 	"github.com/Josedzzz/baky/internal/gitbackup"
-	"github.com/Josedzzz/baky/internal/restore"
 	"github.com/Josedzzz/baky/internal/service"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -16,47 +15,11 @@ const (
 	// menuView is the state where the user interacts with the main menu
 	menuView sessionState = iota
 
-	// filesMenuView is the submenu of the file backups (tar.gz to the backup destination)
-	filesMenuView
-
 	// configMenuView is the submenu of the versioned backup of configuration files
 	configMenuView
 
 	// serviceMenuView is the submenu of the daemon service
 	serviceMenuView
-
-	// managePathsView is the unified state where the user manages backup paths
-	managePathsView
-
-	// configureBackupDestView is the state where the user configures the backup destination path
-	configureBackupDestView
-
-	// backupFilesView is the state where the user runs manual backups
-	backupFilesView
-
-	// inputView is a sub-state for when the user is typing a path
-	inputView
-
-	// backupDestInputView is a sub-state for when the user is typing a backup destination path
-	backupDestInputView
-
-	// viewBackupsView is the state where the user views available backups
-	viewBackupsView
-
-	// selectRestoreDestView is the state where the user selects restore destination
-	selectRestoreDestView
-
-	// selectRestoreActionView is the state where the user selects action for conflicts
-	selectRestoreActionView
-
-	// restorePreviewView lists what restoring the backup would change
-	restorePreviewView
-
-	// restoreFileDiffView compares one file of the backup with the current one
-	restoreFileDiffView
-
-	// restoreInputView is a sub-state for when the user is typing a restore path
-	restoreInputView
 
 	// watchesView is the state where the user manages the watched config folders
 	watchesView
@@ -106,45 +69,14 @@ const (
 
 // Model represents the state of the TUI
 type Model struct {
-	cursor          int
-	menuCursors     map[sessionState]int // remembers the selected entry of each menu
-	quitting        bool
-	state           sessionState
-	pathInput       textinput.Model
-	backupDestInput textinput.Model
-	paths           []config.BackupPathConfig
-	pathsCursor     int // cursor for the paths list
-	editingIndex    int // index of the path being edited (-1 for new)
-	backupDest      string
-	history         []config.BackupEvent
-	historyOffset   int // for scrolling history
-	isProcessing    bool
-	message         string
-	isSuccess       bool
-	width           int
-	height          int
-	// Backup viewing fields
-	allBackups    []restore.BackupInfo // All scanned backups
-	backupsCursor int                  // cursor for backup list
-	backupsOffset int                  // for scrolling backup list
-
-	// Restore operation fields
-	selectedBackup     *restore.BackupInfo // Currently selected backup for restore
-	restoreInput       textinput.Model     // Input for restore path
-	restorePath        string              // User-specified restore path
-	restoreAction      restore.RestoreAction
-	restoreActionIndex int // For selecting action (overwrite/rename/skip)
-	isRestoring        bool
-
-	// Restore preview fields
-	restorePreview        *restore.Preview // what the restore would change
-	restorePreviewErr     string
-	restorePreviewLoading bool
-	previewCursor         int // cursor for the list of files
-	previewOffset         int // for scrolling the list of files
-	fileDiffErr           string
-	fileDiffLoading       bool
-	fileDiffEmpty         bool // the comparison found no differences to show
+	cursor      int
+	menuCursors map[sessionState]int // remembers the selected entry of each menu
+	quitting    bool
+	state       sessionState
+	message     string
+	isSuccess   bool
+	width       int
+	height      int
 
 	// Config backup fields
 	configBackup  config.ConfigBackup
@@ -178,15 +110,6 @@ type Model struct {
 
 // NewModel init and returns a new Model with default values
 func NewModel() Model {
-	ti := textinput.New()
-	ti.Placeholder = "/path/to/back/up"
-
-	di := textinput.New()
-	di.Placeholder = "/path/to/backup/destination"
-
-	ri := textinput.New()
-	ri.Placeholder = "/path/to/restore/to"
-
 	wi := textinput.New()
 	wi.Placeholder = "/etc/openvpn"
 
@@ -194,27 +117,16 @@ func NewModel() Model {
 	pi.Placeholder = "/path/to/config/repository"
 
 	// A config that cannot be read shows as empty; config.Warning() explains why
-	paths, _ := config.GetPaths()
-	backupDest, _ := config.GetNasPath()
-	history, _ := config.GetHistory()
 	configBackup, _ := config.GetConfigBackup()
 
 	m := Model{
-		menuCursors:     map[sessionState]int{},
-		pathInput:       ti,
-		backupDestInput: di,
-		restoreInput:    ri,
-		watchInput:      wi,
-		repoInput:       pi,
-		state:           menuView,
-		editingIndex:    -1,
-		paths:           paths,
-		backupDest:      backupDest,
-		history:         history,
-		allBackups:      []restore.BackupInfo{},
-		configBackup:    configBackup,
-		diffView:        viewport.New(0, 0),
-		logsView:        viewport.New(0, 0),
+		menuCursors:  map[sessionState]int{},
+		watchInput:   wi,
+		repoInput:    pi,
+		state:        menuView,
+		configBackup: configBackup,
+		diffView:     viewport.New(0, 0),
+		logsView:     viewport.New(0, 0),
 	}
 	if warning := config.Warning(); warning != "" {
 		m.message = "Warning: " + warning
