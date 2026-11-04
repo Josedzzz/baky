@@ -72,6 +72,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleWatchSourceInputUpdate(msg)
 		case watchDestInputView:
 			return m.handleWatchDestInputUpdate(msg)
+		case watchNewExcludeInputView:
+			return m.handleWatchNewExcludeInputUpdate(msg)
 		case watchConfirmDeleteView:
 			return m.handleWatchConfirmDeleteUpdate(msg)
 		case watchCheckInputView, watchApplyInputView:
@@ -118,7 +120,7 @@ func (m Model) View() string {
 		switch m.state {
 		case watchesView:
 			m.renderWatches(&body)
-		case watchSourceInputView, watchDestInputView:
+		case watchSourceInputView, watchDestInputView, watchNewExcludeInputView:
 			m.renderWatchInput(&body)
 		case watchConfirmDeleteView:
 			m.renderWatchConfirmDelete(&body)

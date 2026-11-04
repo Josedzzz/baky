@@ -248,3 +248,33 @@ func TestWatchExcludes(t *testing.T) {
 		t.Errorf("expected the excludes to be removed: %+v", cb.Watches[0].Exclude)
 	}
 }
+
+func TestAddWatchExcluding(t *testing.T) {
+	useTempConfig(t)
+
+	if err := AddWatchExcluding("/etc/openvpn", "vpn", []string{"/abs"}); err == nil {
+		t.Errorf("expected an error for a bad pattern")
+	}
+	if cb, _ := GetConfigBackup(); len(cb.Watches) != 0 {
+		t.Errorf("a bad pattern must not add the watch: %+v", cb.Watches)
+	}
+
+	if err := AddWatchExcluding("/etc/openvpn/", "vpn", []string{" *.bak ", ""}); err != nil {
+		t.Fatal(err)
+	}
+	cb, _ := GetConfigBackup()
+	want := WatchConfig{Source: "/etc/openvpn", Dest: "vpn", Exclude: []string{"*.bak"}}
+	if len(cb.Watches) != 1 || !reflect.DeepEqual(cb.Watches[0], want) {
+		t.Errorf("unexpected watches: %+v", cb.Watches)
+	}
+
+	if err := CheckNewWatch("/etc/openvpn", "other"); err == nil {
+		t.Errorf("expected an error for a folder already watched")
+	}
+	if err := CheckNewWatch("/etc/other", "vpn"); err == nil {
+		t.Errorf("expected an error for a destination already used")
+	}
+	if err := CheckNewWatch("/etc/other", "other"); err != nil {
+		t.Errorf("expected a new watch to be valid: %v", err)
+	}
+}

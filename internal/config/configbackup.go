@@ -91,18 +91,9 @@ func ValidateExclude(pattern string) error {
 // SetWatchExcludes sets the extra exclude patterns of a watch. Blank
 // patterns and repeats are dropped.
 func SetWatchExcludes(source string, patterns []string) error {
-	var clean []string
-	seen := map[string]bool{}
-	for _, p := range patterns {
-		p = strings.TrimSpace(p)
-		if p == "" || seen[p] {
-			continue
-		}
-		if err := ValidateExclude(p); err != nil {
-			return err
-		}
-		seen[p] = true
-		clean = append(clean, p)
+	clean, err := cleanExcludes(patterns)
+	if err != nil {
+		return err
 	}
 
 	return update(func(cfg *Config) error {
@@ -114,6 +105,24 @@ func SetWatchExcludes(source string, patterns []string) error {
 		}
 		return fmt.Errorf("the folder '%s' is not being watched", source)
 	})
+}
+
+// cleanExcludes validates patterns, dropping blanks and repeats
+func cleanExcludes(patterns []string) ([]string, error) {
+	var clean []string
+	seen := map[string]bool{}
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p == "" || seen[p] {
+			continue
+		}
+		if err := ValidateExclude(p); err != nil {
+			return nil, err
+		}
+		seen[p] = true
+		clean = append(clean, p)
+	}
+	return clean, nil
 }
 
 // ConfigBackup holds the settings of the versioned backup of configuration
@@ -168,26 +177,57 @@ func SaveConfigRepo(repoDir string) error {
 
 // AddWatch starts watching source and maps it to the dest folder of the repository
 func AddWatch(source, dest string) error {
+	return AddWatchExcluding(source, dest, nil)
+}
+
+// AddWatchExcluding is AddWatch with extra exclude patterns. Both are saved
+// at once: the service starts backing up as soon as it sees the watch, so
+// patterns saved afterwards would come too late for the first backup.
+func AddWatchExcluding(source, dest string, patterns []string) error {
+	exclude, err := cleanExcludes(patterns)
+	if err != nil {
+		return err
+	}
+	if err := CheckNewWatch(source, dest); err != nil {
+		return err
+	}
+	source = filepath.Clean(source)
+
+	return update(func(cfg *Config) error {
+		if err := checkNewWatch(cfg, source, dest); err != nil {
+			return err
+		}
+		cfg.ConfigBackup.Watches = append(cfg.ConfigBackup.Watches, WatchConfig{Source: source, Dest: dest, Exclude: exclude})
+		return nil
+	})
+}
+
+// CheckNewWatch reports why source and dest cannot be added as a watch
+func CheckNewWatch(source, dest string) error {
 	if !filepath.IsAbs(source) {
 		return fmt.Errorf("the path to watch must be absolute: %s", source)
 	}
-	source = filepath.Clean(source)
 	if err := ValidateDestName(dest); err != nil {
 		return err
 	}
+	cfg, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+	return checkNewWatch(cfg, filepath.Clean(source), dest)
+}
 
-	return update(func(cfg *Config) error {
-		for _, w := range cfg.ConfigBackup.Watches {
-			if w.Source == source {
-				return fmt.Errorf("the folder '%s' is already being watched", source)
-			}
-			if w.Dest == dest {
-				return fmt.Errorf("the destination '%s' is already used by '%s'", dest, w.Source)
-			}
+// checkNewWatch rejects a source or a dest that is already in use
+func checkNewWatch(cfg *Config, source, dest string) error {
+	for _, w := range cfg.ConfigBackup.Watches {
+		if w.Source == source {
+			return fmt.Errorf("the folder '%s' is already being watched", source)
 		}
-		cfg.ConfigBackup.Watches = append(cfg.ConfigBackup.Watches, WatchConfig{Source: source, Dest: dest})
-		return nil
-	})
+		if w.Dest == dest {
+			return fmt.Errorf("the destination '%s' is already used by '%s'", dest, w.Source)
+		}
+	}
+	return nil
 }
 
 // RemoveWatch stops watching source. Files already in the repository are kept.

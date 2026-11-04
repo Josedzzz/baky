@@ -11,6 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// excludePlaceholder is the example shown in the exclude patterns input
+const excludePlaceholder = "*.conf.bak, certs/server.crt, keys/"
+
 // handleWatchesUpdate handles key messages in the watched folders list
 func (m Model) handleWatchesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	watches := m.configBackup.Watches
@@ -48,7 +51,7 @@ func (m Model) handleWatchesUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if len(watches) > 0 {
 			m.state = watchExcludeInputView
-			m.watchInput.Placeholder = "*.conf.bak, certs/server.crt, keys/"
+			m.watchInput.Placeholder = excludePlaceholder
 			m.watchInput.SetValue(strings.Join(watches[m.watchesCursor].Exclude, ", "))
 			m.watchInput.CursorEnd()
 			m.watchInput.Focus()
@@ -111,7 +114,37 @@ func (m Model) handleWatchDestInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		dest := strings.TrimSpace(m.watchInput.Value())
-		if err := config.AddWatch(m.pendingSource, dest); err != nil {
+		if err := config.CheckNewWatch(m.pendingSource, dest); err != nil {
+			m.message = err.Error()
+			m.isSuccess = false
+			return m, nil
+		}
+
+		// Third step: what to leave out, before anything is backed up
+		m.pendingDest = dest
+		m.state = watchNewExcludeInputView
+		m.watchInput.Placeholder = excludePlaceholder
+		m.watchInput.Reset()
+		m.message = ""
+		return m, nil
+	}
+	m.watchInput, cmd = m.watchInput.Update(msg)
+	return m, cmd
+}
+
+// handleWatchNewExcludeInputUpdate handles the third step of adding a watch:
+// the extra files to exclude. The watch is only saved here, with its
+// patterns, so that the first backup already leaves those files out.
+func (m Model) handleWatchNewExcludeInputUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch msg.String() {
+	case "esc":
+		m.state = watchesView
+		m.message = ""
+		return m, nil
+	case "enter":
+		patterns := strings.Split(m.watchInput.Value(), ",")
+		if err := config.AddWatchExcluding(m.pendingSource, m.pendingDest, patterns); err != nil {
 			m.message = err.Error()
 			m.isSuccess = false
 			return m, nil
@@ -181,13 +214,20 @@ func (m Model) renderWatches(body *strings.Builder) {
 func (m Model) renderWatchInput(body *strings.Builder) {
 	body.WriteString(titleStyle.Render(" ADD WATCHED FOLDER ") + "\n\n")
 
-	if m.state == watchSourceInputView {
-		body.WriteString("Step 1 of 2 - Path of the folder to watch:\n\n")
-	} else {
+	switch m.state {
+	case watchSourceInputView:
+		body.WriteString("Step 1 of 3 - Path of the folder to watch:\n\n")
+	case watchDestInputView:
 		body.WriteString(headerStyle.Render("Folder: ") + itemStyle.Render(m.pendingSource) + "\n\n")
-		body.WriteString("Step 2 of 2 - Name of the folder inside the repository:\n\n")
+		body.WriteString("Step 2 of 3 - Name of the folder inside the repository:\n\n")
+	default:
+		body.WriteString(headerStyle.Render("Folder: ") + itemStyle.Render(m.pendingSource) + "\n\n")
+		body.WriteString("Step 3 of 3 - Extra patterns that are not backed up, separated by commas\n(empty = none). The first backup starts when you press enter:\n\n")
 	}
 	body.WriteString(m.watchInput.View() + "\n\n")
+	if m.state == watchNewExcludeInputView {
+		m.renderExcludeHelp(body)
+	}
 
 	m.renderMessage(body)
 	body.WriteString(footerStyle.Render("(esc: cancel • enter: continue)"))
@@ -254,12 +294,17 @@ func (m Model) renderWatchExcludeInput(body *strings.Builder) {
 
 	body.WriteString("Extra patterns that are not backed up, separated by commas (empty = none):\n\n")
 	body.WriteString(m.watchInput.View() + "\n\n")
-	body.WriteString(mutedStyle.Render("\"*.bak\" matches a name in any folder, \"keys/\" a whole folder, and\n\"certs/server.crt\" that path inside the watched folder.") + "\n\n")
-	body.WriteString(mutedStyle.Render("Always excluded, as well as any file that holds a private key:") + "\n")
-	body.WriteString(mutedStyle.Width(72).Render(strings.Join(gitbackup.DefaultExcludes, " ")) + "\n\n")
+	m.renderExcludeHelp(body)
 
 	m.renderMessage(body)
 	body.WriteString(footerStyle.Render("(esc: cancel • enter: save)"))
+}
+
+// renderExcludeHelp explains the exclude patterns and shows the built-in list
+func (m Model) renderExcludeHelp(body *strings.Builder) {
+	body.WriteString(mutedStyle.Render("\"*.bak\" matches a name in any folder, \"keys/\" a whole folder, and\n\"certs/server.crt\" that path inside the watched folder.") + "\n\n")
+	body.WriteString(mutedStyle.Render("Always excluded, as well as any file that holds a private key:") + "\n")
+	body.WriteString(mutedStyle.Width(72).Render(strings.Join(gitbackup.DefaultExcludes, " ")) + "\n\n")
 }
 
 // handleWatchCommandInputUpdate handles the two steps of editing the hook

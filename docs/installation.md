@@ -71,7 +71,7 @@ Checking the status does not need `sudo`.
 Run `baky` as the chosen user:
 
 1. **Config backup → Repository**: `e`, type the path of the clone (`/home/grid/grid-config-data`) and confirm. `t` checks that it is a valid repository.
-2. **Config backup → Watched folders**: `a`, type the folder to watch (`/etc/openvpn`) and then the name it will have inside the repository (`vpn`).
+2. **Config backup → Watched folders**: `a`, type the folder to watch (`/etc/openvpn`) and then the name it will have inside the repository (`vpn`), and finally any extra files to exclude. The first backup starts after that last step.
 
 The service applies every change by itself. **Service → Live logs** shows what it is doing.
 
@@ -108,7 +108,7 @@ Keep in mind that `shorewall check` and `shorewall try` run as root on whatever 
 
 ### Keep secrets out of the repository
 
-baky never backs up the usual names of keys and secrets (`*.key`, `*.pem`, `pki/`, `private/` and others), or any file that holds a private key. Check that list against what the watched folders hold, and add what is missing with `x` in **Watched folders**: database passwords, API tokens, or files with an unusual name. For example, for `/etc/openvpn` with a password file for the management interface:
+baky never backs up the usual names of keys and secrets (`*.key`, `*.pem`, `pki/`, `private/` and others), or any file that holds a private key. Check that list against what a folder holds **before you add it**, and type what is missing in the last step of adding it (`x` in **Watched folders** changes it later, but by then the first backup has run): database passwords, API tokens, or files with an unusual name. For example, for `/etc/openvpn` with a password file for the management interface:
 
 ```
 *.pass, auth/
